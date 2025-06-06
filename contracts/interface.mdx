@@ -1,0 +1,421 @@
+---
+title: IIfaPriceFeed Interface
+description: "Complete reference for the IIfaPriceFeed interface structures and function signatures"
+---
+
+# IIfaPriceFeed Interface Reference
+
+The `IIfaPriceFeed` interface defines the standard data structures and function signatures for the IFA Oracle Price Feed System. This interface ensures consistent interaction patterns across all implementations.
+
+## Data Structures
+
+### PriceFeed Structure
+
+The core data structure for storing individual asset price information.
+
+```solidity
+struct PriceFeed {
+    int256 decimal;          // Decimal precision of the price
+    uint256 lastUpdateTime;  // Timestamp of last update
+    uint256 price;           // Current price value
+    uint256 roundId;         // Current round identifier
+}
+```
+
+#### Field Descriptions
+
+| Field | Type | Range | Description |
+|-------|------|-------|-------------|
+| `decimal` | `int256` | -30 to 30 | Decimal precision for the price value |
+| `lastUpdateTime` | `uint256` | Unix timestamp | When the price was last updated |
+| `price` | `uint256` | > 0 | Price value scaled by decimal precision |
+| `roundId` | `uint256` | >= 1 | Sequential round identifier |
+
+#### Usage Example
+
+```solidity
+IIfaPriceFeed.PriceFeed memory btcPrice = IIfaPriceFeed.PriceFeed({
+    decimal: -8,                    // 8 decimal places
+    lastUpdateTime: 1700000000,     // Unix timestamp
+    price: 4500000000000,           // $45,000.00000000 (scaled by 8 decimals)
+    roundId: 157
+});
+```
+
+### DerviedPair Structure
+
+Represents the calculated exchange rate between two assets.
+
+```solidity
+struct DerviedPair {
+    int256 decimal;          // Always set to MAX_DECIMAL_NEGATIVE (-30)
+    uint256 lastUpdateTime;  // Minimum timestamp of the two assets
+    uint256 derivedPrice;    // Calculated exchange rate
+    uint256 roundDifference; // Difference between round IDs
+}
+```
+
+#### Field Descriptions
+
+| Field | Type | Value | Description |
+|-------|------|-------|-------------|
+| `decimal` | `int256` | Always -30 | Fixed precision for derived calculations |
+| `lastUpdateTime` | `uint256` | Unix timestamp | Earliest update time of the two assets |
+| `derivedPrice` | `uint256` | > 0 | Exchange rate scaled to 30 decimals |
+| `roundDifference` | `uint256` | >= 0 | Absolute difference between asset round IDs |
+
+#### Exchange Rate Calculation
+
+The `derivedPrice` is calculated as:
+
+```
+Forward (asset0/asset1):  derivedPrice = (price0 * 10^30) / price1
+Backward (asset1/asset0): derivedPrice = (price1 * 10^30) / price0
+```
+
+#### Usage Example
+
+```solidity
+// CNGN/BTC exchange rate
+IIfaPriceFeed.DerviedPair memory pair = oracle.getPairbyId(
+    keccak256("CNGN"),
+    keccak256("BTC"),
+    IIfaPriceFeed.PairDirection.Forward
+);
+
+// pair.derivedPrice represents how many BTC units = 1 CNGN unit
+uint256 exchangeRate = pair.derivedPrice; // Scaled to 30 decimals
+```
+
+## Enums
+
+### PairDirection
+
+Specifies the direction for exchange rate calculations.
+
+```solidity
+enum PairDirection {
+    Forward,    // Calculate asset0/asset1
+    Backward    // Calculate asset1/asset0
+}
+```
+
+#### Direction Examples
+
+| Direction | Assets | Calculation | Result |
+|-----------|--------|-------------|---------|
+| `Forward` | USDC → BTC | USDC price / BTC price | BTC per USDC |
+| `Backward` | USDC → BTC | BTC price / USDC price | USDC per BTC |
+
+```solidity
+// Get USDC/BTC rate (how much BTC for 1 USDC)
+IIfaPriceFeed.DerviedPair memory forward = oracle.getPairbyId(
+    keccak256("USDC"),
+    keccak256("BTC"), 
+    IIfaPriceFeed.PairDirection.Forward
+);
+
+// Get BTC/USDC rate (how much USDC for 1 BTC)
+IIfaPriceFeed.DerviedPair memory backward = oracle.getPairbyId(
+    keccak256("USDC"),
+    keccak256("BTC"),
+    IIfaPriceFeed.PairDirection.Backward
+);
+```
+
+## Function Signatures
+
+### Read Functions
+
+#### getAssetInfo
+
+```solidity
+function getAssetInfo(bytes32 _assetIndex) 
+    external view 
+    returns (PriceFeed memory assetInfo, bool exist);
+```
+
+**Purpose**: Retrieve price information for a single asset
+
+**Parameters**:
+- `_assetIndex`: Asset identifier (typically `keccak256(assetSymbol)`)
+
+**Returns**:
+- `assetInfo`: PriceFeed struct with price data
+- `exist`: Boolean indicating if asset price exists
+
+#### getAssetsInfo
+
+```solidity
+function getAssetsInfo(bytes32[] calldata _assetIndexes) 
+    external view 
+    returns (PriceFeed[] memory assetsInfo, bool[] memory exists);
+```
+
+**Purpose**: Retrieve price information for multiple assets
+
+**Parameters**:
+- `_assetIndexes`: Array of asset identifiers
+
+**Returns**:
+- `assetsInfo`: Array of PriceFeed structs
+- `exists`: Array of booleans indicating existence
+
+#### getPairbyId
+
+```solidity
+function getPairbyId(
+    bytes32 _assetIndex0, 
+    bytes32 _assetIndex1, 
+    PairDirection _direction
+) external view returns (DerviedPair memory pairInfo);
+```
+
+**Purpose**: Calculate exchange rate between two assets
+
+**Parameters**:
+- `_assetIndex0`: First asset identifier
+- `_assetIndex1`: Second asset identifier  
+- `_direction`: Forward or Backward calculation
+
+**Returns**:
+- `pairInfo`: DerviedPair struct with exchange rate
+
+#### getPairsbyIdForward
+
+```solidity
+function getPairsbyIdForward(
+    bytes32[] calldata _assetIndexes0,
+    bytes32[] calldata _assetsIndexes1
+) external view returns (DerviedPair[] memory pairsInfo);
+```
+
+**Purpose**: Batch calculation of forward exchange rates
+
+**Parameters**:
+- `_assetIndexes0`: Array of first asset identifiers
+- `_assetsIndexes1`: Array of second asset identifiers
+
+**Returns**:
+- `pairsInfo`: Array of DerviedPair structs (forward direction)
+
+#### getPairsbyIdBackward
+
+```solidity
+function getPairsbyIdBackward(
+    bytes32[] calldata _assetIndexes0,
+    bytes32[] calldata _assetsIndexes1  
+) external view returns (DerviedPair[] memory pairsInfo);
+```
+
+**Purpose**: Batch calculation of backward exchange rates
+
+**Parameters**:
+- `_assetIndexes0`: Array of first asset identifiers
+- `_assetsIndexes1`: Array of second asset identifiers
+
+**Returns**:
+- `pairsInfo`: Array of DerviedPair structs (backward direction)
+
+#### getPairsbyId
+
+```solidity
+function getPairsbyId(
+    bytes32[] calldata _assetIndexes0,
+    bytes32[] calldata _assetsIndexes1,
+    PairDirection[] calldata _direction
+) external view returns (DerviedPair[] memory pairsInfo);
+```
+
+**Purpose**: Batch calculation with custom direction per pair
+
+**Parameters**:
+- `_assetIndexes0`: Array of first asset identifiers
+- `_assetsIndexes1`: Array of second asset identifiers
+- `_direction`: Array of directions for each pair
+
+**Returns**:
+- `pairsInfo`: Array of DerviedPair structs
+
+### Write Functions
+
+#### setAssetInfo
+
+```solidity
+function setAssetInfo(bytes32 _assetIndex, PriceFeed calldata assetInfo) 
+    external;
+```
+
+**Purpose**: Update price information for an asset
+
+**Access**: Only callable by the verifier contract
+
+**Parameters**:
+- `_assetIndex`: Asset identifier
+- `assetInfo`: PriceFeed struct with new price data
+
+#### setVerifier
+
+```solidity
+function setVerifier(address _verifier) external;
+```
+
+**Purpose**: Set the authorized verifier contract
+
+**Access**: Only callable by the owner
+
+**Parameters**:
+- `_verifier`: Address of the verifier contract
+
+## Asset Identifier Convention
+
+Asset identifiers are created using `keccak256` hashing:
+
+```solidity
+bytes32 btcId = keccak256("BTC");
+bytes32 usdcId = keccak256("USDC");
+bytes32 cngnId = keccak256("CNGN");
+```
+
+### Standard Asset Examples
+
+| Asset | Symbol | Identifier |
+|-------|--------|------------|
+| Bitcoin | BTC | `keccak256("BTC")` |
+| Ethereum | ETH | `keccak256("ETH")` |
+| USD Coin | USDC | `keccak256("USDC")` |
+| Tether | USDT | `keccak256("USDT")` |
+| Nigerian Naira | CNGN | `keccak256("CNGN")` |
+
+## Decimal Precision System
+
+### Price Scaling
+
+Prices are stored with decimal scaling to maintain precision:
+
+```solidity
+// Example: $45,000.12345678 with 8 decimal places
+// Stored as: 4500012345678 (scaled by 10^8)
+PriceFeed memory price = PriceFeed({
+    decimal: -8,
+    price: 4500012345678,
+    // ... other fields
+});
+```
+
+### Derived Pair Precision
+
+All derived pairs use the maximum negative decimal (-30) for consistency:
+
+```solidity
+// Exchange rate always scaled to 30 decimal places
+DerviedPair memory pair = DerviedPair({
+    decimal: -30,  // Always -30
+    derivedPrice: 123456789012345678901234567890, // 30 decimal precision
+    // ... other fields
+});
+```
+
+## Error Handling
+
+### Common Error Conditions
+
+1. **Asset Not Found**: When querying non-existent assets
+2. **Stale Data**: When price data is too old
+3. **Zero Price**: When price calculations result in zero
+4. **Permission Denied**: When unauthorized access is attempted
+
+### Integration Best Practices
+
+```solidity
+// Always check existence
+(IIfaPriceFeed.PriceFeed memory price, bool exists) = 
+    oracle.getAssetInfo(assetId);
+require(exists, "Asset price not available");
+
+// Check data freshness
+require(
+    block.timestamp - price.lastUpdateTime < MAX_AGE,
+    "Price data too stale"
+);
+
+// Validate price is non-zero
+require(price.price > 0, "Invalid price data");
+```
+
+## Usage Examples
+
+### Basic Integration
+
+```solidity
+contract PriceConsumer {
+    IIfaPriceFeed public oracle;
+    
+    constructor(address _oracle) {
+        oracle = IIfaPriceFeed(_oracle);
+    }
+    
+    function getBTCPrice() external view returns (uint256) {
+        (IIfaPriceFeed.PriceFeed memory price, bool exists) = 
+            oracle.getAssetInfo(keccak256("BTC"));
+        
+        require(exists, "BTC price not available");
+        return price.price;
+    }
+    
+    function getCNGNToBTCRate() external view returns (uint256) {
+        IIfaPriceFeed.DerviedPair memory pair = oracle.getPairbyId(
+            keccak256("CNGN"),
+            keccak256("BTC"),
+            IIfaPriceFeed.PairDirection.Forward
+        );
+        
+        return pair.derivedPrice;
+    }
+}
+```
+
+### Batch Operations
+
+```solidity
+function getMultiplePrices(string[] memory assets) 
+    external view returns (uint256[] memory prices) {
+    
+    bytes32[] memory assetIds = new bytes32[](assets.length);
+    for (uint i = 0; i < assets.length; i++) {
+        assetIds[i] = keccak256(bytes(assets[i]));
+    }
+    
+    (IIfaPriceFeed.PriceFeed[] memory priceData, bool[] memory exists) = 
+        oracle.getAssetsInfo(assetIds);
+    
+    prices = new uint256[](assets.length);
+    for (uint i = 0; i < assets.length; i++) {
+        require(exists[i], "Price not available");
+        prices[i] = priceData[i].price;
+    }
+}
+```
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card
+    title="IfaPriceFeed Contract"
+    icon="database"
+    href="/contracts/pricefeed"
+  >
+    Learn about the main implementation contract
+  </Card>
+  <Card
+    title="Usage Examples"
+    icon="code"
+    href="/usage/examples"
+  >
+    See practical integration examples
+  </Card>
+</CardGroup>
+
+<Note>
+The interface is designed for maximum compatibility and ease of integration. All view functions are gas-free and can be called from any context.
+</Note> 

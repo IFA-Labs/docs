@@ -1,0 +1,67 @@
+---
+title: Installation
+description: "Setup guide for IFA Oracle Price Feed System"
+---
+
+# Installation
+
+## Prerequisites
+
+- Solidity 0.8.29+
+- Foundry
+- Git
+
+## Install Foundry
+
+```bash
+curl -L https://foundry.paradigm.xyz | bash
+foundryup
+```
+
+## Setup
+
+```bash
+# Clone repository
+git clone <repository-url>
+cd ifa-oracle-price-feed
+
+# Install dependencies
+forge soldeer install solady~0.1.14
+
+# Build project
+forge build
+```
+
+## Environment Configuration
+
+Create `.env`:
+
+```bash
+PRIVATE_KEY=your_private_key
+BASE_SEPOLIA_RPC_URL=https://sepolia.base.org
+ETHERSCAN_API_KEY=your_api_key
+```
+
+<Warning>
+Add `.env` to `.gitignore`. Never commit private keys.
+</Warning>
+
+## Test Installation
+
+```bash
+# Run tests
+forge test
+
+# Local deployment test
+anvil  # Terminal 1
+forge script script/DeployPriceFeed.s.sol --rpc-url http://localhost:8545 --broadcast  # Terminal 2
+```
+
+## Deploy to Base Sepolia
+
+```bash
+forge script script/DeployPriceFeed.s.sol \
+  --rpc-url base_sepolia \
+  --broadcast \
+  --verify
+``` 

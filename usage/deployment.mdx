@@ -1,0 +1,445 @@
+---
+title: Deployment Guide
+description: "Deploy IFA Oracle Price Feed System contracts"
+---
+
+# Deployment Guide
+
+Step-by-step deployment of IFA Oracle contracts.
+
+## Prerequisites
+
+- Foundry installed
+- Private key with gas funds
+- RPC endpoint for target network
+- Relayer node address
+
+## Network Setup
+
+Add to `foundry.toml`:
+
+```toml
+[rpc_endpoints]
+base_sepolia = "https://sepolia.base.org"
+
+[etherscan]
+base_sepolia = { key = "${ETHERSCAN_API_KEY}", url = "https://api-sepolia.basescan.org/api" }
+```
+
+Create `.env`:
+
+```bash
+PRIVATE_KEY=0x1234567890abcdef...
+RELAYER_NODE_ADDRESS=0x9876543210fedcba...
+BASE_SEPOLIA_RPC_URL=https://sepolia.base.org
+ETHERSCAN_API_KEY=your_api_key
+```
+
+<Warning>
+Add `.env` to `.gitignore`. Never commit private keys.
+</Warning>
+
+## Deployment Script
+
+Create `script/DeployPriceFeed.s.sol`:
+
+```solidity
+// SPDX-License-Identifier: MIT
+pragma solidity ^0.8.29;
+
+import "forge-std/Script.sol";
+import "../src/IfaPriceFeed.sol";
+import "../src/IfaPriceFeedVerifier.sol";
+
+contract DeployPriceFeed is Script {
+    function run() external {
+        uint256 deployerPrivateKey = vm.envUint("PRIVATE_KEY");
+        address relayerNode = vm.envAddress("RELAYER_NODE_ADDRESS");
+        
+        vm.startBroadcast(deployerPrivateKey);
+        
+        // Deploy contracts
+        IfaPriceFeed priceFeed = new IfaPriceFeed();
+        IfaPriceFeedVerifier verifier = new IfaPriceFeedVerifier(
+            relayerNode,
+            address(priceFeed)
+        );
+        
+        // Link contracts
+        priceFeed.setVerifier(address(verifier));
+        
+        console.log("IfaPriceFeed:", address(priceFeed));
+        console.log("IfaPriceFeedVerifier:", address(verifier));
+        
+        vm.stopBroadcast();
+    }
+}
+```
+
+## Deploy
+
+```bash
+# Deploy to Base Sepolia
+forge script script/DeployPriceFeed.s.sol \
+  --rpc-url base_sepolia \
+  --broadcast \
+  --verify
+```
+
+## Manual Deployment
+
+```bash
+# Deploy IfaPriceFeed
+forge create src/IfaPriceFeed.sol:IfaPriceFeed \
+  --rpc-url base_sepolia \
+  --private-key $PRIVATE_KEY \
+  --verify
+
+# Deploy IfaPriceFeedVerifier
+forge create src/IfaPriceFeedVerifier.sol:IfaPriceFeedVerifier \
+  --rpc-url base_sepolia \
+  --private-key $PRIVATE_KEY \
+  --constructor-args $RELAYER_NODE_ADDRESS $PRICE_FEED_ADDRESS \
+  --verify
+
+# Link contracts
+cast send $PRICE_FEED_ADDRESS \
+  "setVerifier(address)" $VERIFIER_ADDRESS \
+  --rpc-url base_sepolia \
+  --private-key $PRIVATE_KEY
+```
+
+## Verification
+
+```bash
+# Check configuration
+cast call $PRICE_FEED_ADDRESS "verifier()" --rpc-url base_sepolia
+cast call $VERIFIER_ADDRESS "priceFeed()" --rpc-url base_sepolia
+cast call $VERIFIER_ADDRESS "relayerNode()" --rpc-url base_sepolia
+```
+
+## Test Deployment
+
+```bash
+# Submit test price data (as relayer)
+cast send $VERIFIER_ADDRESS \
+  "submitPriceFeed(bytes32[],tuple(int256,uint256,uint256,uint256)[])" \
+  "[0x$(echo -n "USDC" | xxd -p)]" \
+  "[(0,$(date +%s),1000000000000000000000000000000,1)]" \
+  --rpc-url base_sepolia \
+  --private-key $RELAYER_PRIVATE_KEY
+
+# Query price
+cast call $PRICE_FEED_ADDRESS \
+  "getAssetInfo(bytes32)" "0x$(echo -n "USDC" | xxd -p)" \
+  --rpc-url base_sepolia
+```
+
+```solidity
+// script/TestDeployment.s.sol
+pragma solidity ^0.8.29;
+
+import "forge-std/Script.sol";
+import "../src/IIfaPriceFeed.sol";
+
+contract TestDeployment is Script {
+    function run() external view {
+        address priceFeedAddress = 0xbF2ae81D8Adf3AA22401C4cC4f0116E936e1025b;
+        
+        IIfaPriceFeed priceFeed = IIfaPriceFeed(priceFeedAddress);
+        
+        // Test reading non-existent asset
+        (IIfaPriceFeed.PriceFeed memory price, bool exists) = 
+            priceFeed.getAssetInfo(keccak256("BTC"));
+        
+        console.log("BTC price exists:", exists);
+        require(!exists, "BTC should not exist initially");
+        
+        console.log("Basic functionality test passed!");
+    }
+}
+```
+
+Run the test:
+
+```bash
+forge script script/TestDeployment.s.sol --rpc-url base_sepolia
+```
+
+## Step 4: Initial Price Data Submission
+
+### Prepare Test Data
+
+Create a script to submit initial price data:
+
+```solidity
+// script/SubmitInitialPrices.s.sol
+pragma solidity ^0.8.29;
+
+import "forge-std/Script.sol";
+import "../src/IfaPriceFeedVerifier.sol";
+import "../src/IIfaPriceFeed.sol";
+
+contract SubmitInitialPrices is Script {
+    function run() external {
+        uint256 relayerPrivateKey = vm.envUint("RELAYER_PRIVATE_KEY");
+        address verifierAddress = 0xC08CbF336cC0D7163Ef260bF69137c8cA7AF2F3a;
+        
+        vm.startBroadcast(relayerPrivateKey);
+        
+        IfaPriceFeedVerifier verifier = IfaPriceFeedVerifier(verifierAddress);
+        
+        // Prepare asset data
+        bytes32[] memory assetIndexes = new bytes32[](3);
+        assetIndexes[0] = keccak256("BTC");
+        assetIndexes[1] = keccak256("ETH");
+        assetIndexes[2] = keccak256("USDC");
+        
+        IIfaPriceFeed.PriceFeed[] memory prices = new IIfaPriceFeed.PriceFeed[](3);
+        
+        // BTC: $45,000 (8 decimals)
+        prices[0] = IIfaPriceFeed.PriceFeed({
+            decimal: -8,
+            lastUpdateTime: block.timestamp,
+            price: 4500000000000, // $45,000.00000000
+            roundId: 1
+        });
+        
+        // ETH: $3,200 (8 decimals)
+        prices[1] = IIfaPriceFeed.PriceFeed({
+            decimal: -8,
+            lastUpdateTime: block.timestamp,
+            price: 320000000000, // $3,200.00000000
+            roundId: 1
+        });
+        
+        // USDC: $1.00 (8 decimals)
+        prices[2] = IIfaPriceFeed.PriceFeed({
+            decimal: -8,
+            lastUpdateTime: block.timestamp,
+            price: 100000000, // $1.00000000
+            roundId: 1
+        });
+        
+        // Submit prices
+        verifier.submitPriceFeed(assetIndexes, prices);
+        
+        console.log("Initial prices submitted successfully!");
+        
+        vm.stopBroadcast();
+    }
+}
+```
+
+### Execute Price Submission
+
+```bash
+# Add relayer private key to .env
+echo "RELAYER_PRIVATE_KEY=0x..." >> .env
+
+# Submit initial prices
+forge script script/SubmitInitialPrices.s.sol \
+  --rpc-url base_sepolia \
+  --broadcast
+```
+
+### Verify Price Data
+
+```bash
+# Check BTC price
+cast call PRICE_FEED_ADDRESS \
+  "getAssetInfo(bytes32)" \
+  $(cast keccak "BTC") \
+  --rpc-url base_sepolia
+
+# Calculate BTC/ETH exchange rate
+cast call PRICE_FEED_ADDRESS \
+  "getPairbyId(bytes32,bytes32,uint8)" \
+  $(cast keccak "BTC") \
+  $(cast keccak "ETH") \
+  0 \
+  --rpc-url base_sepolia
+```
+
+## Production Deployment Checklist
+
+### Security Considerations
+
+- [ ] **Multi-signature wallet** for contract ownership
+- [ ] **Hardware wallet** or secure key management for deployment
+- [ ] **Timelock contract** for critical function changes
+- [ ] **Monitoring system** for price submissions
+- [ ] **Emergency pause mechanism** (if required)
+
+### Pre-deployment Verification
+
+- [ ] **Code audit** completed and issues resolved
+- [ ] **Testnet deployment** thoroughly tested
+- [ ] **Gas estimation** and optimization completed
+- [ ] **Relayer infrastructure** tested and secured
+- [ ] **Backup relayer nodes** configured
+
+### Post-deployment Tasks
+
+- [ ] **Contract verification** on block explorer
+- [ ] **Documentation** updated with contract addresses
+- [ ] **Monitoring alerts** configured
+- [ ] **Team access** properly configured
+- [ ] **Emergency procedures** documented
+
+## Gas Optimization
+
+### Deployment Costs
+
+Typical gas costs for deployment:
+
+| Contract | Gas Used | Cost (1 gwei) |
+|----------|----------|---------------|
+| IfaPriceFeed | ~1,200,000 | ~$0.05 |
+| IfaPriceFeedVerifier | ~800,000 | ~$0.03 |
+| setVerifier call | ~25,000 | ~$0.001 |
+| **Total** | **~2,025,000** | **~$0.08** |
+
+### Optimization Tips
+
+1. **Batch deployments** during low-gas periods
+2. **Use create2** for deterministic addresses (advanced)
+3. **Optimize constructor parameters** for gas efficiency
+4. **Consider proxy patterns** for upgradeability (advanced)
+
+## Multi-Network Deployment
+
+### Configuration Matrix
+
+| Network | Chain ID | RPC URL | Explorer |
+|---------|----------|---------|----------|
+| Base Mainnet | 8453 | https://mainnet.base.org | basescan.org |
+| Base Sepolia | 84532 | https://sepolia.base.org | sepolia.basescan.org |
+| Ethereum Mainnet | 1 | Your RPC URL | etherscan.io |
+| Arbitrum One | 42161 | https://arb1.arbitrum.io/rpc | arbiscan.io |
+
+### Deploy to Multiple Networks
+
+```bash
+# Deploy to Base Mainnet
+forge script script/DeployPriceFeed.s.sol \
+  --rpc-url base_mainnet \
+  --broadcast \
+  --verify
+
+# Deploy to Arbitrum
+forge script script/DeployPriceFeed.s.sol \
+  --rpc-url arbitrum \
+  --broadcast \
+  --verify
+```
+
+## Troubleshooting
+
+### Common Issues
+
+**1. Gas Estimation Failed**
+```bash
+# Solution: Increase gas limit
+--gas-limit 5000000
+```
+
+**2. Verification Failed**
+```bash
+# Solution: Verify manually
+forge verify-contract \
+  --chain-id 84532 \
+  CONTRACT_ADDRESS \
+  src/IfaPriceFeed.sol:IfaPriceFeed
+```
+
+**3. Insufficient Funds**
+```bash
+# Check balance
+cast balance $DEPLOYER_ADDRESS --rpc-url base_sepolia
+
+# Get testnet funds from faucet
+```
+
+**4. RPC Connection Issues**
+```bash
+# Test RPC connection
+cast block-number --rpc-url base_sepolia
+```
+
+### Error Recovery
+
+**Failed Deployment**:
+1. Check transaction hash for error details
+2. Verify gas limits and prices
+3. Ensure account has sufficient funds
+4. Check network connectivity
+
+**Partial Deployment**:
+1. Note which contracts were deployed successfully
+2. Resume from the last successful step
+3. Update script to skip completed deployments
+
+## Monitoring Setup
+
+### Basic Monitoring Script
+
+```bash
+#!/bin/bash
+# monitor-contracts.sh
+
+PRICE_FEED="0xbF2ae81D8Adf3AA22401C4cC4f0116E936e1025b"
+VERIFIER="0xC08CbF336cC0D7163Ef260bF69137c8cA7AF2F3a"
+RPC_URL="https://sepolia.base.org"
+
+echo "=== Contract Health Check ==="
+
+# Check if contracts are responding
+echo "Price Feed Verifier:"
+cast call $PRICE_FEED "verifier()" --rpc-url $RPC_URL
+
+echo "Verifier Price Feed:"
+cast call $VERIFIER "priceFeed()" --rpc-url $RPC_URL
+
+echo "Relayer Node:"
+cast call $VERIFIER "relayerNode()" --rpc-url $RPC_URL
+
+# Check recent price data
+echo "BTC Price Data:"
+cast call $PRICE_FEED \
+  "getAssetInfo(bytes32)" \
+  $(cast keccak "BTC") \
+  --rpc-url $RPC_URL
+```
+
+Make it executable and run:
+
+```bash
+chmod +x monitor-contracts.sh
+./monitor-contracts.sh
+```
+
+## Next Steps
+
+With your contracts deployed and configured, you're ready to:
+
+<CardGroup cols={2}>
+  <Card
+    title="Integration Examples"
+    icon="code"
+    href="/usage/examples"
+  >
+    Learn how to integrate the oracle into your applications
+  </Card>
+  <Card
+    title="Relayer Setup"
+    icon="server"
+    href="/usage/integration"
+  >
+    Set up and configure your relayer infrastructure
+  </Card>
+</CardGroup>
+
+<Tip>
+Keep your deployment addresses and configuration in a secure location. Consider using a deployment management tool for complex multi-network setups.
+</Tip> 

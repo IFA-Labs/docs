@@ -1,3 +1,32 @@
+/* Make logos bigger and more visible */
+.logo img,
+.navbar-brand img,
+.header-logo img,
+img[src*="logo"],
+.logo svg,
+.navbar-brand svg,
+.header-logo svg,
+svg[src*="logo"],
+[data-logo] img,
+[data-logo] svg,
+/* Dark mode specific selectors */
+[data-theme="dark"] .logo img,
+[data-theme="dark"] .navbar-brand img,
+[data-theme="dark"] img[src*="ifadark"],
+.dark .logo img,
+.dark .navbar-brand img,
+.dark img[src*="ifadark"],
+img[src*="ifadark"],
+/* Additional dark mode variants */
+.logo-dark img,
+.logo-dark svg,
+[data-logo-dark] img,
+[data-logo-dark] svg {
+  height: 130px !important;
+  width: auto !important;
+  max-height:130px !important;
+}
+
 /* Override Mintlify tip colors to use orange brand colors */
 .callout.tip,
 .callout[data-type="tip"],
