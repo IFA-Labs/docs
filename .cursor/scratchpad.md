@@ -190,6 +190,8 @@ From the provided color palette image:
 - ✅ **COMMITTED**: Changes committed to git with descriptive message
 - ✅ **UPDATED**: Implemented orange-only color scheme with orange shades
 - ✅ **FINALIZED**: All themes now use orange variations (#F78E21, #FFB366, #CC6A00)
+- ✅ **FIXED**: Resolved green tip colors by adding custom CSS overrides
+- ✅ **COMPREHENSIVE**: All callout components now use orange branding
 
 ### Final Orange-Only Color Mapping
 ```json
@@ -205,6 +207,12 @@ From the provided color palette image:
 - **#FFB366**: Lighter, more saturated orange for light theme elements
 - **#CC6A00**: Darker, richer orange for dark theme elements
 - **All orange-based**: Complete brand consistency across both themes
+
+**Issue Resolution:**
+- **Green Tips Fixed**: Added custom CSS to override Mintlify's hardcoded green colors
+- **Custom CSS Path**: `/public/css/custom.css` with comprehensive callout overrides
+- **All Callouts**: Tips, Info, Warning, Note, Check components now use orange
+- **Complete Coverage**: Overrode all potential green classes with orange branding
 
 ## Executor's Feedback or Assistance Requests
 
