@@ -4,8 +4,8 @@
   "name": "IfaLabs",
   "colors": {
     "primary": "#F78E21",
-    "light": "#22242B",
-    "dark": "#0C0703"
+    "light": "#FFB366",
+    "dark": "#CC6A00"
   },
   "favicon": "/favicon.svg",
   "navigation": {
