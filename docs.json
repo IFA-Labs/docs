@@ -1,11 +1,11 @@
 {
   "$schema": "https://mintlify.com/docs.json",
   "theme": "mint",
-  "name": "Mint Starter Kit",
+  "name": "IfaLabs",
   "colors": {
-    "primary": "#16A34A",
-    "light": "#07C983",
-    "dark": "#15803D"
+    "primary": "#F78E21",
+    "light": "#22242B",
+    "dark": "#0C0703"
   },
   "favicon": "/favicon.svg",
   "navigation": {
