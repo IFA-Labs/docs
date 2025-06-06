@@ -1,0 +1,70 @@
+/* Override Mintlify tip colors to use orange brand colors */
+.callout.tip,
+.callout[data-type="tip"],
+[data-callout="tip"],
+.tip-callout,
+.tip {
+  border-color: #F78E21 !important;
+  background-color: rgba(247, 142, 33, 0.1) !important;
+}
+
+.callout.tip .callout-icon,
+.callout[data-type="tip"] .callout-icon,
+[data-callout="tip"] .callout-icon,
+.tip-callout .callout-icon,
+.tip .callout-icon,
+.callout.tip svg,
+.callout[data-type="tip"] svg,
+[data-callout="tip"] svg,
+.tip-callout svg,
+.tip svg {
+  color: #F78E21 !important;
+  fill: #F78E21 !important;
+}
+
+/* Also override any green colors that might be showing */
+.callout.tip .callout-title,
+.callout[data-type="tip"] .callout-title,
+[data-callout="tip"] .callout-title,
+.tip-callout .callout-title,
+.tip .callout-title {
+  color: #F78E21 !important;
+}
+
+/* Override any hardcoded green colors */
+.text-green-600,
+.text-green-500,
+.text-green-700,
+.bg-green-100,
+.bg-green-50,
+.border-green-200,
+.border-green-300 {
+  color: #F78E21 !important;
+  background-color: rgba(247, 142, 33, 0.1) !important;
+  border-color: #F78E21 !important;
+}
+
+/* Ensure info, note, and other callouts also use orange */
+.callout.info,
+.callout[data-type="info"],
+.callout.note,
+.callout[data-type="note"],
+.callout.warning,
+.callout[data-type="warning"],
+.callout.check,
+.callout[data-type="check"] {
+  border-color: #F78E21 !important;
+  background-color: rgba(247, 142, 33, 0.1) !important;
+}
+
+.callout.info svg,
+.callout[data-type="info"] svg,
+.callout.note svg,
+.callout[data-type="note"] svg,
+.callout.warning svg,
+.callout[data-type="warning"] svg,
+.callout.check svg,
+.callout[data-type="check"] svg {
+  color: #F78E21 !important;
+  fill: #F78E21 !important;
+} 

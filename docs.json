@@ -112,5 +112,7 @@
       "note": "#F78E21",
       "check": "#F78E21"
     }
-  }
+  },
+  "customCss": "/css/custom.css",
+  "css": "/css/custom.css"
 }
