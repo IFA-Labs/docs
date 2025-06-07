@@ -5,67 +5,199 @@ description: "IFA Oracle system architecture and data flow"
 
 # Architecture
 
-Multi-layered oracle architecture for reliable stablecoin price data.
+Multi-layered oracle architecture for reliable stablecoin price data with 30-decimal precision.
 
 ## System Layers
 
 ```mermaid
 graph TB
-    A[Relayer Node] --> B[IfaPriceFeedVerifier]
-    B --> C[IfaPriceFeed Contract]
-    C --> D[DApp Integration]
+    subgraph "External Layer"
+        A[Relayer Node] 
+        E[Price Sources]
+    end
     
-    E[Price Sources] --> A
+    subgraph "Validation Layer"
+        B[IfaPriceFeedVerifier]
+        F[Access Control]
+        G[Data Validation]
+    end
+    
+    subgraph "Data Layer"
+        C[IfaPriceFeed Contract]
+        H[30-Decimal Engine]
+        I[Exchange Rate Calculator]
+    end
+    
+    subgraph "Interface Layer"
+        D[DApp Integration]
+        J[Batch Operations]
+    end
+    
+    E --> A
+    A --> B
+    F --> B
+    G --> B
+    B --> C
+    H --> C
+    I --> C
+    C --> D
+    J --> D
 ```
 
 ### 1. External Layer
-- **Relayer Node**: Collects price data from external sources
-- **Price Sources**: Market data providers and APIs
+- **Relayer Node**: Authorized price data collector with cryptographic validation
+  - Role-based authentication via verifier contract
+  - Batched submission capability for gas optimization
+  - Replay attack protection through round IDs
+- **Price Sources**: External market data providers and APIs
+  - Multiple data source aggregation
+  - Real-time price feed monitoring
+  - Data integrity verification before submission
 
 ### 2. Validation Layer
-- **IfaPriceFeedVerifier**: Validates incoming price data
-- **Access Control**: Role-based permissions
-- **Data Integrity**: Format and authenticity checks
+- **IfaPriceFeedVerifier**: Multi-stage validation pipeline
+  - **Access Control**: Relayer permission verification using role-based system
+  - **Data Integrity**: Format validation, timestamp verification, and bounds checking
+  - **Security Gates**: Protection against stale data, invalid precision, and malformed payloads
+- **Validation Rules**:
+  - Price values must be positive integers
+  - Decimal precision within bounds (-30 to +30)
+  - Timestamps must be recent (configurable staleness threshold)
+  - Asset IDs must be valid keccak256 hashes
 
 ### 3. Data Layer
-- **IfaPriceFeed Contract**: Stores validated price data
-- **Exchange Rate Engine**: Real-time pair calculations
-- **Storage**: High precision price data (30 decimals)
+- **IfaPriceFeed Contract**: High-precision price storage and computation engine
+  - **30-Decimal Engine**: Fixed-point arithmetic for maximum financial precision
+    - All calculations scaled to 10^30 for consistent precision
+    - Prevents rounding errors in exchange rate calculations
+    - Supports micro-transactions and high-value operations
+  - **Exchange Rate Calculator**: Real-time cross-asset rate computation
+    - Forward/backward rate calculations: `Rate = (PriceA * 10^30) / PriceB`
+    - Batch processing for multiple pairs simultaneously
+    - Timestamp synchronization for consistent pricing
+- **Storage Optimization**: 
+  - Gas-efficient storage patterns
+  - Minimal state changes for cost optimization
 
 ### 4. Interface Layer
-- **IIfaPriceFeed Interface**: Standardized API
-- **Consumer Access**: Read functions for DApps
+- **IIfaPriceFeed Interface**: Standardized API with comprehensive functionality
+  - Single asset queries: `getAssetInfo()`
+  - Batch asset queries: `getAssetsInfo()`
+  - Exchange rate calculations: `getPairById()`, `getPairsbyIdForward()`
+- **Consumer Access**: Read-only functions optimized for DApp integration
+  - **Batch Operations**: Retrieve multiple prices in single transaction
+  - **Direction Control**: Forward/backward exchange rate calculations
+  - **Error Handling**: Existence checks and validation responses
 
 ## Data Flow
+
+### Normal Price Update Flow
 
 ```mermaid
 sequenceDiagram
     participant PS as Price Sources
-    participant RN as Relayer
+    participant RN as Relayer Node
+    participant V as IfaPriceFeedVerifier
+    participant PF as IfaPriceFeed
+    participant App as DApp Consumer
+
+    PS->>RN: Price Data Stream
+    RN->>RN: Aggregate & Format
+    RN->>V: submitPriceFeed(assetIds[], priceFeeds[])
+    
+    Note over V: Validation Pipeline
+    V->>V: Check relayer permissions
+    V->>V: Validate price format
+    V->>V: Verify timestamps
+    V->>V: Check decimal bounds
+    
+    V->>PF: setAssetInfo(assetId, priceFeed)
+    PF->>PF: Store price data
+    PF->>PF: Update round ID
+    
+    App->>PF: getPairById(assetA, assetB)
+    PF->>PF: Calculate: (priceA * 10^30) / priceB
+    PF->>App: DerivedPair{rate, timestamp, roundDiff}
+```
+
+### Batch Operations Flow
+
+```mermaid
+sequenceDiagram
+    participant RN as Relayer Node
     participant V as Verifier
     participant PF as PriceFeed
     participant App as DApp
 
-    PS->>RN: Price Data
-    RN->>V: submitPriceFeed()
-    V->>PF: setAssetInfo()
-    App->>PF: getPairById()
-    PF->>App: Exchange Rate
+    Note over RN: Batch Price Submission
+    RN->>V: submitPriceFeed([BTC,ETH,USDC], [priceFeeds])
+    
+    loop For each asset
+        V->>V: Validate individual asset
+        V->>PF: setAssetInfo(assetId, priceFeed)
+    end
+    
+    Note over App: Batch Price Retrieval
+    App->>PF: getAssetsInfo([BTC,ETH,USDC])
+    PF->>App: [priceFeeds], [exists]
+    
+    App->>PF: getPairsbyIdForward([BTC,ETH], [USDC,USDT])
+    PF->>App: [BTC/USDC, ETH/USDT] rates
 ```
 
-## Security Model
+### Error Handling Flow
 
-### Access Control
-- **Owner**: Full administrative control
-- **Verifier**: Can update price data
-- **Relayer**: Submits data through verifier
-- **Users**: Read-only access
+```mermaid
+sequenceDiagram
+    participant RN as Relayer Node
+    participant V as Verifier
+    participant PF as PriceFeed
+    participant App as DApp
 
-### Security Features
-- Role-based permissions
-- Data format validation
-- Timestamp verification
-- Replay attack prevention
+    Note over RN,V: Invalid Relayer Access
+    RN->>V: submitPriceFeed(data)
+    V->>V: Check permissions
+    V-->>RN: Revert: "Not authorized relayer"
+    
+    Note over V,PF: Validation Failure
+    RN->>V: submitPriceFeed(invalidData)
+    V->>V: Validate format
+    V-->>RN: Revert: "Invalid price format"
+    
+    Note over App,PF: Non-existent Asset Query
+    App->>PF: getAssetInfo(unknownAssetId)
+    PF->>App: (emptyPriceFeed, exists: false)
+    
+    Note over App,PF: Division by Zero Protection
+    App->>PF: getPairById(assetA, assetB)
+    Note over PF: If priceB = 0
+    PF-->>App: Revert: "Division by zero"
+```
+
+### Real-time Integration Pattern
+
+```mermaid
+sequenceDiagram
+    participant Timer as Update Timer
+    participant RN as Relayer
+    participant V as Verifier  
+    participant PF as PriceFeed
+    participant DeFi as DeFi Protocol
+
+    loop Every Update Interval
+        Timer->>RN: Trigger price update
+        RN->>V: Submit latest prices
+        V->>PF: Update stored prices
+        
+        DeFi->>PF: getPairById(collateral, debt)
+        PF->>DeFi: Current exchange rate
+        DeFi->>DeFi: Calculate liquidation threshold
+        
+        alt Price movement triggers action
+            DeFi->>DeFi: Execute liquidation/rebalancing
+        end
+    end
+```
 
 ## Exchange Rate Calculation
 
@@ -78,7 +210,8 @@ Rate = Price(Asset A) / Price(Asset B)
 - Bidirectional calculations (A→B, B→A)
 - Real-time rate updates
 
-## Integration
+
+## Basic Integration
 
 ```solidity
 // Get exchange rate

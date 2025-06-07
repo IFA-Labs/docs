@@ -2,10 +2,18 @@
 
 ## Background and Motivation
 
-**LATEST TASK**: Remove all bluffs and make documentation concise
-- **Mode**: Executor mode
-- **Scope**: Simplify verbose content across all documentation pages
-- **Goal**: Keep only essential information, remove marketing language and excessive examples
+**LATEST TASK**: Enhance architecture.mdx - too scanty after conciseness changes
+- **Mode**: Plan and Execute (Planner → Executor)
+- **Scope**: Expand architecture.mdx with proper technical depth while maintaining clarity
+- **Goal**: Provide comprehensive architecture overview that helps developers understand the sophisticated IFA Oracle system
+
+**Issue Identified**: The recent conciseness task over-simplified architecture.mdx, removing essential technical details that developers need to understand:
+- Missing detailed component interactions
+- Insufficient explanation of data validation flow
+- Lacking precision scaling mechanics
+- Missing error handling and edge cases
+- Insufficient deployment architecture details
+- Missing performance characteristics
 
 **PREVIOUS COMPLETED TASKS**: 
 - ✅ Orange-only color scheme implementation
@@ -29,57 +37,99 @@
 4. **Focus on Action**: Direct instructions instead of explanatory text
 5. **Essential Info Only**: Keep only what users need to implement
 
+### Architecture Documentation Enhancement Analysis
+
+**Current State Issues:**
+1. **Shallow Technical Depth**: Current architecture.mdx lacks the technical sophistication needed for a precision oracle system
+2. **Missing Critical Components**: 
+   - Precision scaling mechanics (30-decimal system)
+   - Detailed validation pipeline
+   - Performance characteristics and gas costs
+   - Error handling and edge cases
+   - Security considerations beyond basic access control
+3. **Insufficient Data Flow Details**: Current sequence diagram is too high-level
+4. **Missing Implementation Context**: No guidance on deployment considerations or integration patterns
+
+**Technical Sophistication Required:**
+- The IFA Oracle is a precision financial system with 30-decimal accuracy
+- Complex validation pipeline with role-based security
+- Real-time exchange rate calculations between arbitrary asset pairs
+- Batch operations for efficiency
+- Multiple contract interaction patterns
+
+**Target Audience**: Developers integrating the oracle who need to understand:
+- How precision scaling works and why it matters
+- Security model and trust assumptions
+- Performance characteristics and optimization strategies
+- Error conditions and handling
+- Deployment and operational considerations
+
 ## High-level Task Breakdown
 
-### Phase 1: Core Pages Simplification ✅
-- [x] **Task 1.1**: Simplify index.mdx homepage
-  - Success Criteria: Concise overview with essential links only
+### Phase 1: Architecture Enhancement Planning ✅
+- [x] **Task 1.1**: Analyze current architecture.mdx gaps
+  - Success Criteria: Identified missing technical components and depth issues
   - Status: COMPLETED
 
-- [x] **Task 1.2**: Condense installation.mdx guide  
-  - Success Criteria: Direct setup steps without verbose explanations
-  - Status: COMPLETED
+- [ ] **Task 1.2**: Create comprehensive enhancement plan
+  - Success Criteria: Detailed section-by-section improvement plan
+  - Status: IN PROGRESS
 
-- [x] **Task 1.3**: Streamline architecture.mdx
-  - Success Criteria: Essential architecture info only
-  - Status: COMPLETED
+### Phase 2: Core Architecture Expansion
+- [ ] **Task 2.1**: Enhance System Layers section with technical details
+  - Success Criteria: Detailed explanation of each layer with precision mechanics, validation pipeline, and security model
+  - Key additions: Precision scaling, validation rules, error handling
 
-### Phase 2: Contract Documentation ✅
-- [x] **Task 2.1**: Simplify contracts/overview.mdx
-  - Success Criteria: Concise contract descriptions and key functions
-  - Status: COMPLETED
+- [ ] **Task 2.2**: Expand Data Flow with detailed sequence diagrams
+  - Success Criteria: Multiple sequence diagrams covering different scenarios (normal flow, error cases, batch operations)
+  - Key additions: Validation steps, error flows, batch processing
 
-### Phase 3: Usage Documentation ✅
-- [x] **Task 3.1**: Condense usage/deployment.mdx
-  - Success Criteria: Direct deployment steps without verbose explanations
-  - Status: COMPLETED
+- [ ] **Task 2.3**: Add comprehensive Security Model section
+  - Success Criteria: Detailed security architecture with trust assumptions, attack vectors, and mitigation strategies
+  - Key additions: Role hierarchy, permission matrix, security considerations
 
-- [x] **Task 3.2**: Streamline usage/integration.mdx
-  - Success Criteria: Essential integration patterns only
-  - Status: COMPLETED
+### Phase 3: Implementation and Operational Details
+- [ ] **Task 3.1**: Add Performance and Precision section
+  - Success Criteria: Detailed explanation of 30-decimal precision, gas costs, and optimization strategies
+  - Key additions: Calculation examples, gas estimates, precision rationale
+
+- [ ] **Task 3.2**: Add Deployment Architecture section
+  - Success Criteria: Comprehensive deployment patterns, network considerations, and operational requirements
+  - Key additions: Multi-network deployment, relayer setup, monitoring
+
+- [ ] **Task 3.3**: Enhance Integration section with advanced patterns
+  - Success Criteria: Detailed integration examples with error handling, batching, and optimization
+  - Key additions: Production patterns, error handling, performance optimization
+
+### Phase 4: Validation and Testing
+- [ ] **Task 4.1**: Review enhanced architecture against contract documentation
+  - Success Criteria: All technical details align with actual contract implementations
+  - Validation: Cross-reference with pricefeed.mdx, verifier.mdx, interface.mdx
+
+- [ ] **Task 4.2**: Ensure appropriate technical depth without verbosity
+  - Success Criteria: Technical sophistication without unnecessary marketing language
+  - Balance: Essential technical details with clear, actionable information
 
 ## Project Status Board
 
 ### To Do
-- None currently
+- [ ] **Task 2.1**: Enhance System Layers section with technical details
+- [ ] **Task 2.2**: Expand Data Flow with detailed sequence diagrams  
+- [ ] **Task 2.3**: Add comprehensive Security Model section
+- [ ] **Task 3.1**: Add Performance and Precision section
+- [ ] **Task 3.2**: Add Deployment Architecture section
+- [ ] **Task 3.3**: Enhance Integration section with advanced patterns
+- [ ] **Task 4.1**: Review enhanced architecture against contract documentation
+- [ ] **Task 4.2**: Ensure appropriate technical depth without verbosity
 
 ### In Progress  
-- None currently
+- [x] **Task 1.2**: Create comprehensive enhancement plan (COMPLETED - ready for Executor)
 
 ### Completed ✅
-- [x] **CONCISENESS TASK COMPLETE**: Simplified all verbose documentation
-- [x] Simplified index.mdx homepage content
-- [x] Condensed installation.mdx to essential setup steps
-- [x] Streamlined architecture.mdx to core concepts
-- [x] Simplified contracts/overview.mdx to key information
-- [x] Condensed usage/deployment.mdx to direct steps
-- [x] Streamlined usage/integration.mdx to essential patterns
+- [x] **Task 1.1**: Analyze current architecture.mdx gaps
 
-**Previous Completed Tasks:**
-- [x] Orange-only color scheme implementation
-- [x] Custom CSS for orange tip colors
-- [x] Complete IFA Oracle documentation content
-- [x] Documentation structure reorganization
+**Previous Task Completions:**
+- [x] **CONCISENESS TASK COMPLETE**: Simplified all verbose documentation (prior task)
 
 ### Cancelled
 - [x] Auto commit script setup (per user request)
@@ -89,19 +139,29 @@
 
 ## Current Status / Progress Tracking
 
-**Current Phase**: Documentation Conciseness Complete ✅
-**Last Updated**: All documentation pages simplified and made concise
-**Next Milestone**: Awaiting new task assignment
+**Current Phase**: Planning Complete - Ready for Executor Implementation
+**Current Role**: Transitioning from Planner to Executor
+**Last Updated**: Architecture enhancement plan completed
+**Next Milestone**: Begin implementing enhanced architecture.mdx
 
-### Summary of Conciseness Changes
-1. **index.mdx**: Removed verbose descriptions, condensed to essential overview with navigation cards
-2. **installation.mdx**: Simplified from 225 lines to ~60 lines, direct setup steps only  
-3. **architecture.mdx**: Streamlined from 290 lines to ~80 lines, core concepts only
-4. **contracts/overview.mdx**: Condensed complex explanations to key contract information
-5. **usage/deployment.mdx**: Simplified from 508 lines to ~80 lines, essential deployment steps
-6. **usage/integration.mdx**: Reduced from 730 lines to ~200 lines, core patterns only
+### Planner's Handoff to Executor
 
-**Impact**: Documentation is now developer-focused, actionable, and free of marketing language while retaining all essential technical information.
+**Enhancement Strategy Approved:**
+1. **Maintain Clarity**: Keep the existing clean structure while adding technical depth
+2. **Add Technical Sections**: Precision mechanics, detailed security model, performance characteristics
+3. **Enhance Diagrams**: More detailed sequence diagrams for different scenarios
+4. **Implementation Focus**: Add deployment and operational considerations
+5. **Keep Actionable**: Ensure all additions help developers implement and integrate
+
+**Key Enhancement Areas Identified:**
+- System layers need precision mechanics explanation
+- Data flow needs validation pipeline details  
+- Security model needs role hierarchy and threat analysis
+- Missing performance and precision section entirely
+- Missing deployment architecture guidance
+- Integration section needs advanced patterns
+
+**Ready for**: Executor to begin implementation starting with Task 2.1
 
 ## Executor's Feedback or Assistance Requests
 

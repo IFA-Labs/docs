@@ -17,8 +17,17 @@
             "group": "Get Started",
             "pages": [
               "index",
-              "installation",
-              "architecture"
+              "installation"
+            ]
+          },
+          {
+            "group": "Architecture",
+            "pages": [
+              "architecture",
+              "architecture/security-model",
+              "architecture/performance-precision",
+              "architecture/deployment",
+              "architecture/integration"
             ]
           },
           {
