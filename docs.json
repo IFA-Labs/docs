@@ -7,7 +7,7 @@
     "light": "#F78E21", 
     "dark": "#CC6A00"
   },
-  "favicon": "/favicon.svg",
+  "favicon": "/ifalight.svg",
   "navigation": {
     "tabs": [
       {
@@ -48,15 +48,6 @@
             "pages": [
               "api-reference/introduction"
             ]
-          },
-          {
-            "group": "Endpoint Examples",
-            "pages": [
-              "api-reference/endpoint/get",
-              "api-reference/endpoint/create",
-              "api-reference/endpoint/delete",
-              "api-reference/endpoint/webhook"
-            ]
           }
         ]
       }
@@ -65,17 +56,17 @@
       "anchors": [
         {
           "anchor": "Documentation",
-          "href": "https://mintlify.com/docs",
+          "href": "https://ifalabs.mintlify.app/",
           "icon": "book-open-cover"
         },
         {
-          "anchor": "Community",
-          "href": "https://mintlify.com/community",
-          "icon": "slack"
+          "anchor": "Website",
+          "href": "https://ifalabs.com",
+          "icon": "globe"
         },
         {
           "anchor": "Blog",
-          "href": "https://mintlify.com/blog",
+          "href": "https://mirror.xyz/0x4801BcefA7Af2Af79Ee7132A4B317fb62A77b9C7/QOytHQar8Lq_OGttcf1U1bbm0OoLXlfULnygE8x-_ro",
           "icon": "newspaper"
         }
       ]
