@@ -54,6 +54,204 @@ graph TB
   - Real-time price feed monitoring
   - Data integrity verification before submission
 
+## Off-chain Relayer Architecture
+
+```mermaid
+graph TB
+    subgraph "Data Collection Layer"
+        A1[Primary APIs] --> B1[API Client]
+        A2[Backup APIs] --> B1
+        B1 --> C1[Data Aggregator]
+    end
+    
+    subgraph "Processing Layer"
+        C1 --> D1[Price Validator]
+        D1 --> E1[Outlier Detection]
+        E1 --> F1[TWAP Calculator]
+        F1 --> G1[Precision Converter]
+    end
+    
+    subgraph "Transaction Layer"
+        G1 --> H1[Transaction Manager]
+        H1 --> I1[Gas Optimizer]
+        I1 --> J1[Blockchain Client]
+    end
+    
+    subgraph "Monitoring Layer"
+        K1[Health Monitor]
+        L1[Alert System]
+        M1[Performance Metrics]
+    end
+    
+    K1 --> H1
+    L1 --> H1
+    M1 --> H1
+```
+
+### 1. Data Collection Layer
+- **Primary Data Sources**
+  - Direct exchange API connections
+  - WebSocket price feeds
+  - REST API endpoints
+  - Configurable update frequencies
+- **Backup Sources**
+  - Secondary price aggregators
+  - Fallback data providers
+  - Automatic failover logic
+- **Data Aggregator**
+  - Connection pool management
+  - Rate limiting compliance
+  - Data normalization pipeline
+
+### 2. Processing Layer
+- **Price Validation**
+  - Format verification
+  - Range validation
+  - Timestamp checks
+  - Source reliability scoring
+- **Outlier Detection**
+  - Statistical analysis
+  - Moving average comparisons
+  - Volatility thresholds
+  - Configurable deviation limits
+- **TWAP Calculator**
+  - Time-weighted average price
+  - Configurable time windows
+  - Volume-weighted options
+- **Precision Converter**
+  - 30-decimal conversion logic
+  - Rounding rules
+  - Overflow protection
+
+### 3. Transaction Layer
+- **Transaction Manager**
+  - Queue management
+  - Retry logic
+  - Nonce tracking
+  - Transaction signing
+- **Gas Optimizer**
+  - Dynamic gas pricing
+  - EIP-1559 support
+  - Priority fee estimation
+  - Batch optimization
+- **Blockchain Client**
+  - Multiple RPC endpoints
+  - Automatic node failover
+  - Connection health monitoring
+  - Transaction confirmation tracking
+
+### 4. Monitoring Layer
+- **Health Monitor**
+  - Component status tracking
+  - Resource utilization
+  - Connection states
+  - Processing pipeline metrics
+- **Alert System**
+  - Error notifications
+  - Performance alerts
+  - Price deviation warnings
+  - Infrastructure alerts
+- **Performance Metrics**
+  - Response times
+  - Update frequencies
+  - Gas costs
+  - Success rates
+
+### Relayer High Availability
+```mermaid
+graph TB
+    subgraph "Primary Relayer"
+        A[Active Node]
+        B[Hot Standby]
+    end
+    
+    subgraph "Backup Relayer"
+        C[Warm Standby]
+        D[Cold Standby]
+    end
+    
+    A -->|Heartbeat| B
+    B -->|Monitor| A
+    B -->|Failover| C
+    C -->|Emergency| D
+```
+
+- **Active-Active Configuration**
+  - Multiple relayer instances
+  - Load balancing
+  - Geographic distribution
+  - Automatic failover
+- **Backup Systems**
+  - Hot standby nodes
+  - Warm failover instances
+  - Cold backup systems
+  - Data synchronization
+
+### Error Handling & Recovery
+```mermaid
+graph LR
+    A[Error Detection] -->|Classify| B[Error Type]
+    B -->|Temporary| C[Retry Logic]
+    B -->|Persistent| D[Failover]
+    B -->|Critical| E[Emergency Stop]
+    
+    C -->|Success| F[Resume]
+    C -->|Failure| D
+    D -->|Success| F
+    D -->|Failure| E
+```
+
+- **Error Classification**
+  - Network issues
+  - API failures
+  - Data validation errors
+  - Blockchain issues
+- **Recovery Procedures**
+  - Automatic retry logic
+  - Circuit breakers
+  - Fallback procedures
+  - Manual intervention protocols
+
+### Configuration Management
+```yaml
+relayer:
+  primary_sources:
+    - name: binance
+      type: websocket
+      priority: 1
+      rate_limit: 100/minute
+    - name: coinbase
+      type: rest
+      priority: 2
+      rate_limit: 50/minute
+  
+  backup_sources:
+    - name: coingecko
+      type: rest
+      priority: 3
+    - name: coinmarketcap
+      type: rest
+      priority: 4
+
+  validation:
+    price_deviation_threshold: 2.5%
+    minimum_sources: 3
+    twap_window: 5minutes
+    
+  transaction:
+    max_batch_size: 10
+    retry_attempts: 3
+    gas_premium: 10%
+    confirmation_blocks: 2
+    
+  monitoring:
+    heartbeat_interval: 30seconds
+    alert_channels:
+      - slack
+      - email
+      - pagerduty
+```
+
 ### 2. Validation Layer
 - **IfaPriceFeedVerifier**: Multi-stage validation pipeline
   - **Access Control**: Relayer permission verification using role-based system
