@@ -1,0 +1,596 @@
+---
+title: Installation
+description: "Complete setup guide for the IFA Oracle Price Feed System"
+---
+
+# Installation Guide
+
+Complete setup instructions for installing, configuring, and testing the IFA Oracle Price Feed System.
+
+## System Requirements
+
+### Software Prerequisites
+
+| Tool | Version | Purpose |
+|------|---------|---------|
+| **Node.js** | 18.0+ | JavaScript runtime |
+| **Git** | Latest | Version control |
+| **Foundry** | Latest | Solidity development toolkit |
+| **Solidity** | 0.8.29+ | Smart contract language |
+
+### Operating System Support
+
+- **macOS**: 12.0+ (Intel/Apple Silicon)
+- **Linux**: Ubuntu 20.04+, Debian 11+
+- **Windows**: WSL2 recommended
+
+## Installation Steps
+
+### 1. Install Development Tools
+
+#### Install Node.js
+
+**macOS (using Homebrew)**:
+```bash
+brew install node
+```
+
+**Linux (using NodeSource)**:
+```bash
+curl -fsSL https://deb.nodesource.com/setup_lts.x | sudo -E bash -
+sudo apt-get install -y nodejs
+```
+
+**Windows**:
+Download from [nodejs.org](https://nodejs.org/) or use WSL2.
+
+#### Install Git
+
+**macOS**:
+```bash
+brew install git
+```
+
+**Linux**:
+```bash
+sudo apt update
+sudo apt install git
+```
+
+**Windows**:
+Download from [git-scm.com](https://git-scm.com/) or use WSL2.
+
+### 2. Install Foundry
+
+#### Automated Installation
+
+```bash
+# Download and install Foundry
+curl -L https://foundry.paradigm.xyz | bash
+
+# Update PATH (add to ~/.bashrc or ~/.zshrc)
+source ~/.bashrc
+
+# Install latest version
+foundryup
+```
+
+#### Verify Installation
+
+```bash
+# Check installed versions
+forge --version
+cast --version
+anvil --version
+chisel --version
+```
+
+Expected output:
+```
+forge 0.2.0 (latest)
+cast 0.2.0 (latest) 
+anvil 0.2.0 (latest)
+chisel 0.2.0 (latest)
+```
+
+### 3. Clone and Setup Project
+
+#### Clone Repository
+
+```bash
+# Clone the project
+git clone https://github.com/yourusername/ifa-oracle-price-feed.git
+cd ifa-oracle-price-feed
+
+# Create development branch (optional)
+git checkout -b develop
+```
+
+#### Install Dependencies
+
+```bash
+# Install Solidity dependencies using Soldeer
+forge soldeer install
+
+# Alternative: using git submodules
+forge install
+
+# Install specific versions
+forge soldeer install solady~0.1.14
+forge soldeer install forge-std~1.7.1
+forge soldeer install openzeppelin-contracts~5.0.0
+```
+
+#### Build Project
+
+```bash
+# Compile all contracts
+forge build
+
+# Build with specific optimizer runs
+forge build --optimizer-runs 200
+
+# Build and generate artifacts
+forge build --extra-output-files abi storageLayout
+```
+
+## Environment Configuration
+
+### 1. Create Environment Files
+
+Create `.env` in project root:
+
+```bash
+# Network Configuration
+MAINNET_RPC_URL=https://eth-mainnet.alchemyapi.io/v2/YOUR_API_KEY
+BASE_MAINNET_RPC_URL=https://mainnet.base.org
+BASE_SEPOLIA_RPC_URL=https://sepolia.base.org
+ARBITRUM_RPC_URL=https://arb1.arbitrum.io/rpc
+
+# Private Keys (Never commit these!)
+DEPLOYER_PRIVATE_KEY=0x1234567890abcdef...
+RELAYER_PRIVATE_KEY=0xfedcba0987654321...
+
+# API Keys for Contract Verification
+ETHERSCAN_API_KEY=your_etherscan_api_key
+BASESCAN_API_KEY=your_basescan_api_key
+ARBISCAN_API_KEY=your_arbiscan_api_key
+
+# Relayer Configuration
+RELAYER_NODE_ADDRESS=0x742d35Cc6634C0532925a3b8D0d65a1532B84A19
+
+# Optional: Testing Configuration
+FORK_BLOCK_NUMBER=latest
+GAS_PRICE=1000000000
+GAS_LIMIT=5000000
+```
+
+### 2. Configure Foundry
+
+Update `foundry.toml`:
+
+```toml
+[profile.default]
+src = "src"
+out = "out"
+libs = ["dependencies"]
+solc = "0.8.29"
+optimizer = true
+optimizer_runs = 200
+via_ir = false
+
+# Test configuration
+[profile.default.fuzz]
+runs = 256
+max_test_rejects = 65536
+seed = '0x3e8'
+dictionary_weight = 40
+include_storage = true
+include_push_bytes = true
+
+# Network configurations
+[rpc_endpoints]
+mainnet = "${MAINNET_RPC_URL}"
+base = "${BASE_MAINNET_RPC_URL}"
+base_sepolia = "${BASE_SEPOLIA_RPC_URL}"
+arbitrum = "${ARBITRUM_RPC_URL}"
+localhost = "http://127.0.0.1:8545"
+
+# Etherscan configuration for verification
+[etherscan]
+mainnet = { key = "${ETHERSCAN_API_KEY}" }
+base = { key = "${BASESCAN_API_KEY}", url = "https://api.basescan.org/api" }
+base_sepolia = { key = "${BASESCAN_API_KEY}", url = "https://api-sepolia.basescan.org/api" }
+arbitrum = { key = "${ARBISCAN_API_KEY}", url = "https://api.arbiscan.io/api" }
+
+# Formatter configuration
+[fmt]
+line_length = 120
+tab_width = 4
+bracket_spacing = true
+int_types = "long"
+multiline_func_header = "all"
+quote_style = "double"
+number_underscore = "thousands"
+```
+
+### 3. Security Configuration
+
+Create `.gitignore`:
+
+```gitignore
+# Environment files
+.env
+.env.local
+.env.*.local
+
+# Foundry
+cache/
+out/
+broadcast/
+
+# Node.js
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+```
+
+<Warning>
+**Never commit private keys or sensitive configuration!** Always add `.env` files to `.gitignore` and use environment variables or secure key management systems in production.
+</Warning>
+
+## Verify Installation
+
+### 1. Compile Contracts
+
+```bash
+# Clean and rebuild
+forge clean
+forge build
+
+# Check for compilation errors
+echo $?  # Should output 0 for success
+```
+
+### 2. Run Tests
+
+```bash
+# Run all tests
+forge test
+
+# Run tests with verbose output
+forge test -vvv
+
+# Run specific test file
+forge test --match-path test/IfaPriceFeed.t.sol
+
+# Run with gas reports
+forge test --gas-report
+
+# Run with coverage
+forge coverage
+```
+
+Expected output:
+```
+Running 25 tests for test/IfaPriceFeed.t.sol:IfaPriceFeedTest
+[PASS] testGetAssetInfo() (gas: 123456)
+[PASS] testSetAssetInfo() (gas: 234567)
+...
+Test result: ok. 25 passed; 0 failed; finished in 2.34s
+```
+
+### 3. Local Deployment Test
+
+**Terminal 1 - Start Local Node**:
+```bash
+# Start Anvil (local Ethereum node)
+anvil --host 0.0.0.0 --port 8545
+
+# With specific accounts and balance
+anvil --accounts 10 --balance 1000000
+```
+
+**Terminal 2 - Deploy Contracts**:
+```bash
+# Deploy to local network
+forge script script/DeployPriceFeed.s.sol \
+  --rpc-url http://localhost:8545 \
+  --broadcast \
+  --sender 0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266
+
+# Verify deployment
+cast call DEPLOYED_ADDRESS "owner()" --rpc-url http://localhost:8545
+```
+
+### 4. Network Connectivity Test
+
+```bash
+# Test RPC connections
+cast block-number --rpc-url base_sepolia
+cast gas-price --rpc-url base_sepolia
+
+# Test account balance
+cast balance 0xYOUR_ADDRESS --rpc-url base_sepolia
+
+# Test contract call (using existing contract)
+cast call 0xbF2ae81D8Adf3AA22401C4cC4f0116E936e1025b \
+  "owner()" \
+  --rpc-url base_sepolia
+```
+
+## Development Environment Setup
+
+### 1. IDE Configuration
+
+#### Visual Studio Code Extensions
+
+```bash
+# Install recommended extensions
+code --install-extension JuanBlanco.solidity
+code --install-extension tintinweb.solidity-visual-auditor
+code --install-extension NomicFoundation.hardhat-solidity
+```
+
+Create `.vscode/settings.json`:
+```json
+{
+  "solidity.compileUsingRemoteVersion": "v0.8.29",
+  "solidity.formatter": "forge",
+  "editor.formatOnSave": true,
+  "solidity.packageDefaultDependenciesContractsDirectory": "src",
+  "solidity.packageDefaultDependenciesDirectory": "dependencies"
+}
+```
+
+#### Vim/Neovim Setup
+
+Add to your config:
+```vim
+" Solidity syntax highlighting
+Plug 'TovarishFin/vim-solidity'
+Plug 'thesis/vim-solidity'
+```
+
+### 2. Testing Setup
+
+Create test environment file `test/.env.test`:
+
+```bash
+# Test-specific configuration
+TEST_FORK_URL=https://sepolia.base.org
+TEST_FORK_BLOCK_NUMBER=latest
+TEST_PRIVATE_KEY=0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80
+TEST_RELAYER_ADDRESS=0x70997970C51812dc3A010C7d01b50e0d17dc79C8
+```
+
+### 3. Scripts and Automation
+
+Create `scripts/setup.sh`:
+
+```bash
+#!/bin/bash
+set -e
+
+echo "🚀 Setting up IFA Oracle development environment..."
+
+# Check prerequisites
+echo "📋 Checking prerequisites..."
+command -v forge >/dev/null 2>&1 || { echo "❌ Foundry not installed"; exit 1; }
+command -v git >/dev/null 2>&1 || { echo "❌ Git not installed"; exit 1; }
+
+# Install dependencies
+echo "📦 Installing dependencies..."
+forge soldeer install
+
+# Build contracts
+echo "🔨 Building contracts..."
+forge build
+
+# Run tests
+echo "🧪 Running tests..."
+forge test
+
+echo "✅ Setup complete! Ready for development."
+```
+
+Make it executable:
+```bash
+chmod +x scripts/setup.sh
+./scripts/setup.sh
+```
+
+## Testnet Setup
+
+### 1. Get Testnet Funds
+
+#### Base Sepolia Faucet
+
+```bash
+# Visit faucets (requires GitHub/Twitter verification)
+open https://faucet.quicknode.com/base/sepolia
+open https://www.alchemy.com/faucets/base-sepolia
+
+# Check received funds
+cast balance YOUR_ADDRESS --rpc-url base_sepolia
+```
+
+#### Alternative: Bridge from Ethereum Sepolia
+
+```bash
+# Bridge ETH from Ethereum Sepolia to Base Sepolia
+# Use official Base bridge: https://bridge.base.org/
+```
+
+### 2. Deploy to Testnet
+
+```bash
+# Deploy to Base Sepolia
+forge script script/DeployPriceFeed.s.sol \
+  --rpc-url base_sepolia \
+  --broadcast \
+  --verify \
+  --slow
+
+# Save deployment addresses
+echo "PRICE_FEED_ADDRESS=$(forge script script/DeployPriceFeed.s.sol --rpc-url base_sepolia --dry-run | grep 'IfaPriceFeed:' | cut -d' ' -f2)" >> .env
+```
+
+## Troubleshooting
+
+### Common Issues
+
+#### 1. Foundry Installation Issues
+
+**Error**: `foundryup: command not found`
+
+**Solution**:
+```bash
+# Ensure PATH is correctly set
+echo 'export PATH="$HOME/.foundry/bin:$PATH"' >> ~/.bashrc
+source ~/.bashrc
+
+# Or manually download
+curl -L https://foundry.paradigm.xyz | bash
+~/.foundry/bin/foundryup
+```
+
+#### 2. Compilation Errors
+
+**Error**: `Compiler version not found`
+
+**Solution**:
+```bash
+# Install specific Solidity version
+foundryup --version nightly
+solc-select install 0.8.29
+solc-select use 0.8.29
+```
+
+**Error**: `Dependencies not found`
+
+**Solution**:
+```bash
+# Reinstall dependencies
+rm -rf dependencies/
+forge soldeer install
+forge build
+```
+
+#### 3. Network Connection Issues
+
+**Error**: `Connection refused`
+
+**Solutions**:
+```bash
+# Test RPC endpoint
+curl -X POST https://sepolia.base.org \
+  -H "Content-Type: application/json" \
+  -d '{"jsonrpc":"2.0","method":"eth_blockNumber","params":[],"id":1}'
+
+# Use alternative RPC
+export BASE_SEPOLIA_RPC_URL="https://base-sepolia-rpc.publicnode.com"
+
+# Check firewall/proxy settings
+```
+
+#### 4. Gas and Transaction Issues
+
+**Error**: `Transaction underpriced`
+
+**Solution**:
+```bash
+# Increase gas price
+forge script script/DeployPriceFeed.s.sol \
+  --rpc-url base_sepolia \
+  --gas-price 2000000000 \
+  --broadcast
+```
+
+**Error**: `Insufficient funds`
+
+**Solution**:
+```bash
+# Check balance
+cast balance $DEPLOYER_ADDRESS --rpc-url base_sepolia
+
+# Get more testnet funds from faucet
+```
+
+### Getting Help
+
+#### Documentation
+- 📚 [Foundry Book](https://book.getfoundry.sh/)
+- 🏗️ [Base Documentation](https://docs.base.org/)
+- 🔗 [Solidity Documentation](https://docs.soliditylang.org/)
+
+#### Community Support
+- 💬 [Foundry Discord](https://discord.gg/foundry)
+- 🐦 [Base Twitter](https://twitter.com/base)
+- 📧 [Project Issues](https://github.com/yourusername/ifa-oracle/issues)
+
+#### Debug Commands
+
+```bash
+# Verbose logging
+export RUST_LOG=debug
+
+# Trace failed transactions
+cast run TRANSACTION_HASH --rpc-url base_sepolia
+
+# Check contract storage
+cast storage CONTRACT_ADDRESS SLOT --rpc-url base_sepolia
+
+# Estimate gas
+cast estimate CONTRACT_ADDRESS "function()" --rpc-url base_sepolia
+```
+
+## Next Steps
+
+With your development environment set up, you're ready to:
+
+<CardGroup cols={2}>
+  <Card
+    title="Architecture Overview"
+    icon="sitemap"
+    href="/architecture"
+  >
+    Understand the system architecture and components
+  </Card>
+  <Card
+    title="Contract Deployment"
+    icon="rocket"
+    href="/usage/deployment"
+  >
+    Deploy contracts to testnet or mainnet
+  </Card>
+  <Card
+    title="Integration Examples"
+    icon="code"
+    href="/usage/examples"
+  >
+    See practical integration examples
+  </Card>
+  <Card
+    title="Contract Reference"
+    icon="book"
+    href="/contracts/overview"
+  >
+    Explore contract functions and interfaces
+  </Card>
+</CardGroup>
+
+<Tip>
+**Pro Tip**: Bookmark this installation guide and keep your `.env` file template for future projects. Consider using a tool like [direnv](https://direnv.net/) for automatic environment loading.
+</Tip> 

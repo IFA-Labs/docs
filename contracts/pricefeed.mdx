@@ -1,0 +1,548 @@
+---
+title: IfaPriceFeed Contract
+description: "Complete function reference for the main IfaPriceFeed contract"
+---
+
+# IfaPriceFeed Contract
+
+The `IfaPriceFeed` contract is the core implementation of the IFA Oracle Price Feed System. It stores asset price data and provides exchange rate calculations between any two supported assets.
+
+## Contract Overview
+
+- **Contract Name**: `IfaPriceFeed`
+- **Location**: `src/IfaPriceFeed.sol`
+- **Inheritance**: Implements `IIfaPriceFeed` interface
+- **Access Control**: Owner-based with verifier delegation
+
+## Constants
+
+### Precision Constants
+
+```solidity
+int256 public constant MAX_DECIMAL = 30;
+int256 public constant MAX_DECIMAL_NEGATIVE = -30;
+```
+
+These constants define the maximum precision limits for price calculations:
+- `MAX_DECIMAL`: Maximum positive decimal scaling (30)
+- `MAX_DECIMAL_NEGATIVE`: Maximum negative decimal scaling (-30)
+
+All derived pair calculations use `MAX_DECIMAL_NEGATIVE` for consistent precision.
+
+## State Variables
+
+### Core Storage
+
+```solidity
+mapping(bytes32 => PriceFeed) private assetPrices;
+address public verifier;
+address public owner;
+```
+
+- `assetPrices`: Maps asset IDs to their price data
+- `verifier`: Address authorized to update price data
+- `owner`: Contract owner with administrative privileges
+
+## Function Reference
+
+### View Functions (Read-Only)
+
+#### getAssetInfo
+
+```solidity
+function getAssetInfo(bytes32 _assetIndex) 
+    external view 
+    returns (PriceFeed memory assetInfo, bool exist)
+```
+
+**Purpose**: Retrieve price information for a specific asset
+
+**Parameters**:
+- `_assetIndex`: Asset identifier (keccak256 hash of asset symbol)
+
+**Returns**:
+- `assetInfo`: Complete PriceFeed struct containing:
+  - `decimal`: Price decimal precision
+  - `lastUpdateTime`: Last update timestamp
+  - `price`: Current price value
+  - `roundId`: Current round identifier
+- `exist`: Boolean indicating whether the asset exists
+
+**Gas Cost**: ~2,500 gas
+
+**Example Usage**:
+```solidity
+(IIfaPriceFeed.PriceFeed memory btcPrice, bool exists) = 
+    priceFeed.getAssetInfo(keccak256("BTC"));
+
+if (exists) {
+    uint256 price = btcPrice.price;
+    uint256 lastUpdate = btcPrice.lastUpdateTime;
+    int256 decimals = btcPrice.decimal;
+}
+```
+
+#### getAssetsInfo
+
+```solidity
+function getAssetsInfo(bytes32[] calldata _assetIndexes) 
+    external view 
+    returns (PriceFeed[] memory assetsInfo, bool[] memory exists)
+```
+
+**Purpose**: Retrieve price information for multiple assets in a single call
+
+**Parameters**:
+- `_assetIndexes`: Array of asset identifiers
+
+**Returns**:
+- `assetsInfo`: Array of PriceFeed structs (same order as input)
+- `exists`: Array of existence flags (same order as input)
+
+**Gas Cost**: ~2,500 + (1,500 * number of assets) gas
+
+**Example Usage**:
+```solidity
+bytes32[] memory assets = new bytes32[](3);
+assets[0] = keccak256("BTC");
+assets[1] = keccak256("ETH");
+assets[2] = keccak256("USDC");
+
+(IIfaPriceFeed.PriceFeed[] memory prices, bool[] memory exists) = 
+    priceFeed.getAssetsInfo(assets);
+
+for (uint i = 0; i < assets.length; i++) {
+    if (exists[i]) {
+        console.log("Price for asset", i, ":", prices[i].price);
+    }
+}
+```
+
+#### getPairbyId
+
+```solidity
+function getPairbyId(
+    bytes32 _assetIndex0, 
+    bytes32 _assetIndex1, 
+    PairDirection _direction
+) external view returns (DerviedPair memory pairInfo)
+```
+
+**Purpose**: Calculate the exchange rate between two assets
+
+**Parameters**:
+- `_assetIndex0`: First asset identifier
+- `_assetIndex1`: Second asset identifier
+- `_direction`: Calculation direction (Forward or Backward)
+
+**Returns**:
+- `pairInfo`: DerivedPair struct containing:
+  - `decimal`: Always `-30` for maximum precision
+  - `lastUpdateTime`: Minimum of both asset update times
+  - `derivedPrice`: Calculated exchange rate
+  - `roundDifference`: Absolute difference between round IDs
+
+**Gas Cost**: ~5,000 gas
+
+**Calculation Logic**:
+```
+Forward:  derivedPrice = (price0 * 10^30) / price1
+Backward: derivedPrice = (price1 * 10^30) / price0
+```
+
+**Example Usage**:
+```solidity
+// Get USDC/BTC exchange rate (how much BTC for 1 USDC)
+IIfaPriceFeed.DerviedPair memory pair = priceFeed.getPairbyId(
+    keccak256("USDC"),
+    keccak256("BTC"),
+    IIfaPriceFeed.PairDirection.Forward
+);
+
+uint256 usdcToBtcRate = pair.derivedPrice; // Scaled to 30 decimals
+uint256 dataAge = block.timestamp - pair.lastUpdateTime;
+```
+
+#### getPairsbyIdForward
+
+```solidity
+function getPairsbyIdForward(
+    bytes32[] calldata _assetIndexes0,
+    bytes32[] calldata _assetsIndexes1
+) external view returns (DerviedPair[] memory pairsInfo)
+```
+
+**Purpose**: Batch calculation of exchange rates in forward direction
+
+**Parameters**:
+- `_assetIndexes0`: Array of first asset identifiers
+- `_assetsIndexes1`: Array of second asset identifiers
+
+**Requirements**:
+- Both arrays must have the same length
+- Each pair is calculated as asset0/asset1
+
+**Returns**:
+- `pairsInfo`: Array of DerivedPair structs (forward direction)
+
+**Gas Cost**: ~5,000 + (3,000 * number of pairs) gas
+
+**Example Usage**:
+```solidity
+bytes32[] memory assets0 = new bytes32[](2);
+bytes32[] memory assets1 = new bytes32[](2);
+
+assets0[0] = keccak256("USDC");
+assets0[1] = keccak256("ETH");
+assets1[0] = keccak256("BTC");
+assets1[1] = keccak256("USDT");
+
+// Calculate [USDC/BTC, ETH/USDT]
+IIfaPriceFeed.DerviedPair[] memory pairs = 
+    priceFeed.getPairsbyIdForward(assets0, assets1);
+```
+
+#### getPairsbyIdBackward
+
+```solidity
+function getPairsbyIdBackward(
+    bytes32[] calldata _assetIndexes0,
+    bytes32[] calldata _assetsIndexes1
+) external view returns (DerviedPair[] memory pairsInfo)
+```
+
+**Purpose**: Batch calculation of exchange rates in backward direction
+
+**Parameters**:
+- `_assetIndexes0`: Array of first asset identifiers
+- `_assetsIndexes1`: Array of second asset identifiers
+
+**Requirements**:
+- Both arrays must have the same length
+- Each pair is calculated as asset1/asset0
+
+**Returns**:
+- `pairsInfo`: Array of DerivedPair structs (backward direction)
+
+**Gas Cost**: ~5,000 + (3,000 * number of pairs) gas
+
+**Example Usage**:
+```solidity
+// Calculate [BTC/USDC, USDT/ETH] (reversed from forward)
+IIfaPriceFeed.DerviedPair[] memory pairs = 
+    priceFeed.getPairsbyIdBackward(assets0, assets1);
+```
+
+#### getPairsbyId
+
+```solidity
+function getPairsbyId(
+    bytes32[] calldata _assetIndexes0,
+    bytes32[] calldata _assetsIndexes1,
+    PairDirection[] calldata _direction
+) external view returns (DerviedPair[] memory pairsInfo)
+```
+
+**Purpose**: Batch calculation with custom direction for each pair
+
+**Parameters**:
+- `_assetIndexes0`: Array of first asset identifiers
+- `_assetsIndexes1`: Array of second asset identifiers
+- `_direction`: Array of directions (one per pair)
+
+**Requirements**:
+- All three arrays must have the same length
+
+**Returns**:
+- `pairsInfo`: Array of DerivedPair structs with mixed directions
+
+**Gas Cost**: ~5,000 + (3,000 * number of pairs) gas
+
+**Example Usage**:
+```solidity
+IIfaPriceFeed.PairDirection[] memory directions = 
+    new IIfaPriceFeed.PairDirection[](2);
+directions[0] = IIfaPriceFeed.PairDirection.Forward;  // USDC/BTC
+directions[1] = IIfaPriceFeed.PairDirection.Backward; // USDT/ETH
+
+IIfaPriceFeed.DerviedPair[] memory pairs = 
+    priceFeed.getPairsbyId(assets0, assets1, directions);
+```
+
+### Write Functions (State-Changing)
+
+#### setAssetInfo
+
+```solidity
+function setAssetInfo(bytes32 _assetIndex, PriceFeed calldata assetInfo) 
+    external
+```
+
+**Purpose**: Update price information for a specific asset
+
+**Access Control**: Only callable by the designated verifier contract
+
+**Parameters**:
+- `_assetIndex`: Asset identifier
+- `assetInfo`: Complete PriceFeed struct with new data
+
+**Gas Cost**: ~30,000 gas per asset
+
+**Security**: 
+- Validates caller is the authorized verifier
+- No additional validation on price data (handled by verifier)
+
+**Example Usage** (from verifier contract):
+```solidity
+// Called internally by IfaPriceFeedVerifier
+priceFeed.setAssetInfo(
+    keccak256("BTC"),
+    IIfaPriceFeed.PriceFeed({
+        decimal: -8,
+        lastUpdateTime: block.timestamp,
+        price: 4500000000000, // $45,000 with 8 decimals
+        roundId: currentRound + 1
+    })
+);
+```
+
+#### setVerifier
+
+```solidity
+function setVerifier(address _verifier) external
+```
+
+**Purpose**: Set or update the authorized verifier contract address
+
+**Access Control**: Only callable by the contract owner
+
+**Parameters**:
+- `_verifier`: Address of the new verifier contract
+
+**Gas Cost**: ~25,000 gas
+
+**Security Considerations**:
+- Critical function that controls who can update prices
+- Should be used with caution and proper verification
+- Consider using a timelock for production systems
+
+**Example Usage**:
+```solidity
+// Deploy new verifier
+IfaPriceFeedVerifier newVerifier = new IfaPriceFeedVerifier(
+    relayerAddress,
+    address(priceFeed)
+);
+
+// Update verifier (owner only)
+priceFeed.setVerifier(address(newVerifier));
+```
+
+## Access Control
+
+### Permission Matrix
+
+| Function | Owner | Verifier | Anyone |
+|----------|-------|----------|--------|
+| `getAssetInfo` | ✅ | ✅ | ✅ |
+| `getAssetsInfo` | ✅ | ✅ | ✅ |
+| `getPairbyId` | ✅ | ✅ | ✅ |
+| `getPairsbyIdForward` | ✅ | ✅ | ✅ |
+| `getPairsbyIdBackward` | ✅ | ✅ | ✅ |
+| `getPairsbyId` | ✅ | ✅ | ✅ |
+| `setAssetInfo` | ❌ | ✅ | ❌ |
+| `setVerifier` | ✅ | ❌ | ❌ |
+
+### Security Features
+
+**Owner Controls**:
+- Can set/change the verifier contract
+- Cannot directly update price data
+- Implements ownership transfer patterns
+
+**Verifier Delegation**:
+- Only verifier can update asset prices
+- Separates price validation from storage
+- Enables modular upgrade paths
+
+**Public Access**:
+- All read functions are publicly accessible
+- No restrictions on price queries
+- Gas-free view functions
+
+## Price Calculation Details
+
+### Exchange Rate Formula
+
+The contract calculates exchange rates using high-precision arithmetic:
+
+```solidity
+// For Forward direction (asset0/asset1):
+uint256 derivedPrice = (price0 * 10^30) / price1;
+
+// For Backward direction (asset1/asset0):
+uint256 derivedPrice = (price1 * 10^30) / price0;
+```
+
+### Precision Handling
+
+**Input Precision**: Variable per asset (stored in `decimal` field)
+**Output Precision**: Always 30 decimal places for derived pairs
+**Calculation**: Uses Solidity's built-in arithmetic (overflow protection)
+
+### Timestamp Management
+
+**Asset Timestamps**: Individual per asset
+**Pair Timestamps**: Minimum of the two asset timestamps
+**Staleness Detection**: Left to consuming applications
+
+## Integration Patterns
+
+### Basic Price Consumer
+
+```solidity
+contract SimpleConsumer {
+    IIfaPriceFeed public immutable oracle;
+    
+    constructor(address _oracle) {
+        oracle = IIfaPriceFeed(_oracle);
+    }
+    
+    function requireFreshPrice(bytes32 assetId, uint256 maxAge) 
+        internal view returns (IIfaPriceFeed.PriceFeed memory) {
+        
+        (IIfaPriceFeed.PriceFeed memory price, bool exists) = 
+            oracle.getAssetInfo(assetId);
+        
+        require(exists, "Asset not found");
+        require(
+            block.timestamp - price.lastUpdateTime <= maxAge,
+            "Price too stale"
+        );
+        
+        return price;
+    }
+    
+    function getUSDCPrice() external view returns (uint256) {
+        IIfaPriceFeed.PriceFeed memory price = 
+            requireFreshPrice(keccak256("USDC"), 3600); // 1 hour max age
+        return price.price;
+    }
+}
+```
+
+### Advanced Exchange Rate Consumer
+
+```solidity
+contract ExchangeCalculator {
+    IIfaPriceFeed public immutable oracle;
+    uint256 public constant MAX_PRICE_AGE = 1800; // 30 minutes
+    
+    constructor(address _oracle) {
+        oracle = IIfaPriceFeed(_oracle);
+    }
+    
+    function calculateExchange(
+        string memory fromAsset,
+        string memory toAsset,
+        uint256 amount
+    ) external view returns (uint256 result, uint256 dataAge) {
+        
+        bytes32 fromId = keccak256(bytes(fromAsset));
+        bytes32 toId = keccak256(bytes(toAsset));
+        
+        IIfaPriceFeed.DerviedPair memory pair = oracle.getPairbyId(
+            fromId,
+            toId,
+            IIfaPriceFeed.PairDirection.Forward
+        );
+        
+        require(pair.derivedPrice > 0, "Invalid exchange rate");
+        
+        dataAge = block.timestamp - pair.lastUpdateTime;
+        require(dataAge <= MAX_PRICE_AGE, "Exchange rate too stale");
+        
+        // Convert from 30 decimal precision to desired precision
+        result = (amount * pair.derivedPrice) / 10**30;
+    }
+}
+```
+
+## Error Conditions
+
+### Common Failure Scenarios
+
+1. **Asset Not Found**: Querying non-existent asset returns `exist = false`
+2. **Division by Zero**: Handled gracefully with zero price detection
+3. **Permission Denied**: Unauthorized calls to restricted functions revert
+4. **Array Length Mismatch**: Batch functions require matching array lengths
+
+### Error Handling Best Practices
+
+```solidity
+// Always check existence
+(IIfaPriceFeed.PriceFeed memory price, bool exists) = 
+    oracle.getAssetInfo(assetId);
+if (!exists) {
+    // Handle missing asset
+    revert("Asset price not available");
+}
+
+// Validate price data
+require(price.price > 0, "Invalid price");
+require(
+    block.timestamp - price.lastUpdateTime < MAX_AGE,
+    "Price data stale"
+);
+
+// Handle batch operations
+require(
+    assets0.length == assets1.length,
+    "Array length mismatch"
+);
+```
+
+## Performance Optimization
+
+### Gas Optimization Tips
+
+1. **Batch Operations**: Use batch functions for multiple queries
+2. **Storage Reads**: Minimize repeated calls for same asset
+3. **View Functions**: All read operations are gas-free when called externally
+4. **Array Pre-allocation**: Pre-allocate arrays for better gas efficiency
+
+### Recommended Usage Patterns
+
+```solidity
+// Efficient: Single batch call
+(PriceFeed[] memory prices, bool[] memory exists) = 
+    oracle.getAssetsInfo([btcId, ethId, usdcId]);
+
+// Inefficient: Multiple individual calls
+(PriceFeed memory btc,) = oracle.getAssetInfo(btcId);
+(PriceFeed memory eth,) = oracle.getAssetInfo(ethId);
+(PriceFeed memory usdc,) = oracle.getAssetInfo(usdcId);
+```
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card
+    title="IfaPriceFeedVerifier"
+    icon="shield-check"
+    href="/contracts/verifier"
+  >
+    Learn about the verification contract
+  </Card>
+  <Card
+    title="Deployment Guide"
+    icon="rocket"
+    href="/usage/deployment"
+  >
+    Deploy and configure the contracts
+  </Card>
+</CardGroup>
+
+<Note>
+The IfaPriceFeed contract is designed for high throughput and gas efficiency. All view functions are optimized for minimal gas usage and can be called frequently without concern for costs.
+</Note> 

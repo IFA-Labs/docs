@@ -1,0 +1,780 @@
+---
+title: Integration Examples
+description: "Practical examples and code samples for integrating the IFA Oracle Price Feed System"
+---
+
+# Integration Examples
+
+This page provides practical examples and code samples for integrating the IFA Oracle Price Feed System into your applications. From simple price queries to complex DeFi protocols, these examples demonstrate real-world usage patterns.
+
+## Basic Integration Examples
+
+### Simple Price Consumer
+
+The most basic integration pattern for consuming price data:
+
+```solidity
+// SPDX-License-Identifier: MIT
+pragma solidity ^0.8.29;
+
+import "./IIfaPriceFeed.sol";
+
+contract SimplePriceConsumer {
+    IIfaPriceFeed public immutable oracle;
+    uint256 public constant MAX_PRICE_AGE = 3600; // 1 hour
+    
+    constructor(address _oracle) {
+        oracle = IIfaPriceFeed(_oracle);
+    }
+    
+    function getAssetPrice(string memory assetSymbol) 
+        external view returns (uint256 price, uint256 decimal, uint256 age) {
+        
+        bytes32 assetId = keccak256(bytes(assetSymbol));
+        (IIfaPriceFeed.PriceFeed memory priceData, bool exists) = 
+            oracle.getAssetInfo(assetId);
+        
+        require(exists, "Asset price not available");
+        
+        age = block.timestamp - priceData.lastUpdateTime;
+        require(age <= MAX_PRICE_AGE, "Price data too stale");
+        
+        return (priceData.price, uint256(int256(-priceData.decimal)), age);
+    }
+    
+    function getBTCPrice() external view returns (uint256) {
+        (uint256 price,,) = this.getAssetPrice("BTC");
+        return price;
+    }
+}
+```
+
+### Exchange Rate Calculator
+
+Calculate exchange rates between different assets:
+
+```solidity
+// SPDX-License-Identifier: MIT
+pragma solidity ^0.8.29;
+
+import "./IIfaPriceFeed.sol";
+
+contract ExchangeRateCalculator {
+    IIfaPriceFeed public immutable oracle;
+    uint256 public constant MAX_PRICE_AGE = 1800; // 30 minutes
+    
+    constructor(address _oracle) {
+        oracle = IIfaPriceFeed(_oracle);
+    }
+    
+    function calculateExchangeRate(
+        string memory fromAsset,
+        string memory toAsset
+    ) external view returns (
+        uint256 exchangeRate,
+        uint256 dataAge,
+        uint256 roundDifference
+    ) {
+        bytes32 fromId = keccak256(bytes(fromAsset));
+        bytes32 toId = keccak256(bytes(toAsset));
+        
+        IIfaPriceFeed.DerviedPair memory pair = oracle.getPairbyId(
+            fromId,
+            toId,
+            IIfaPriceFeed.PairDirection.Forward
+        );
+        
+        require(pair.derivedPrice > 0, "Invalid exchange rate");
+        
+        dataAge = block.timestamp - pair.lastUpdateTime;
+        require(dataAge <= MAX_PRICE_AGE, "Exchange rate too stale");
+        
+        return (pair.derivedPrice, dataAge, pair.roundDifference);
+    }
+    
+    function convertAmount(
+        string memory fromAsset,
+        string memory toAsset,
+        uint256 amount,
+        uint8 outputDecimals
+    ) external view returns (uint256 convertedAmount) {
+        (uint256 rate,,) = this.calculateExchangeRate(fromAsset, toAsset);
+        
+        // Convert from 30-decimal rate to desired output decimals
+        // rate is scaled by 10^30, so we need to adjust
+        convertedAmount = (amount * rate) / (10**(30 - outputDecimals));
+    }
+}
+```
+
+## Advanced Integration Patterns
+
+### Multi-Asset Portfolio Valuer
+
+Calculate the total value of a portfolio with multiple assets:
+
+```solidity
+// SPDX-License-Identifier: MIT
+pragma solidity ^0.8.29;
+
+import "./IIfaPriceFeed.sol";
+
+contract PortfolioValuer {
+    IIfaPriceFeed public immutable oracle;
+    
+    struct Asset {
+        string symbol;
+        uint256 amount;
+        uint8 decimals;
+    }
+    
+    struct PortfolioValue {
+        uint256 totalValueUSD;
+        uint256 oldestPriceAge;
+        bool allPricesValid;
+    }
+    
+    constructor(address _oracle) {
+        oracle = IIfaPriceFeed(_oracle);
+    }
+    
+    function calculatePortfolioValue(Asset[] memory assets) 
+        external view returns (PortfolioValue memory result) {
+        
+        require(assets.length > 0, "Empty portfolio");
+        
+        // Prepare batch query
+        bytes32[] memory assetIds = new bytes32[](assets.length);
+        for (uint i = 0; i < assets.length; i++) {
+            assetIds[i] = keccak256(bytes(assets[i].symbol));
+        }
+        
+        // Get all prices in one call
+        (IIfaPriceFeed.PriceFeed[] memory prices, bool[] memory exists) = 
+            oracle.getAssetsInfo(assetIds);
+        
+        uint256 totalValue = 0;
+        uint256 oldestAge = 0;
+        bool allValid = true;
+        
+        for (uint i = 0; i < assets.length; i++) {
+            if (!exists[i]) {
+                allValid = false;
+                continue;
+            }
+            
+            IIfaPriceFeed.PriceFeed memory priceData = prices[i];
+            uint256 age = block.timestamp - priceData.lastUpdateTime;
+            
+            if (age > oldestAge) {
+                oldestAge = age;
+            }
+            
+            // Calculate asset value in USD
+            // Adjust for asset decimals and price decimals
+            uint256 assetValue = (assets[i].amount * priceData.price) / 
+                (10**(assets[i].decimals + uint256(int256(-priceData.decimal))));
+            
+            totalValue += assetValue;
+        }
+        
+        return PortfolioValue({
+            totalValueUSD: totalValue,
+            oldestPriceAge: oldestAge,
+            allPricesValid: allValid
+        });
+    }
+}
+```
+
+### DeFi Lending Protocol Integration
+
+Example of integrating the oracle into a lending protocol:
+
+```solidity
+// SPDX-License-Identifier: MIT
+pragma solidity ^0.8.29;
+
+import "./IIfaPriceFeed.sol";
+
+contract LendingProtocol {
+    IIfaPriceFeed public immutable oracle;
+    
+    uint256 public constant MAX_PRICE_AGE = 600; // 10 minutes for lending
+    uint256 public constant LIQUIDATION_THRESHOLD = 8000; // 80% in basis points
+    uint256 public constant BASIS_POINTS = 10000;
+    
+    struct Position {
+        string collateralAsset;
+        string borrowedAsset;
+        uint256 collateralAmount;
+        uint256 borrowedAmount;
+        uint256 lastUpdateTime;
+    }
+    
+    mapping(address => Position) public positions;
+    
+    constructor(address _oracle) {
+        oracle = IIfaPriceFeed(_oracle);
+    }
+    
+    function checkLiquidation(address user) 
+        external view returns (bool canLiquidate, uint256 healthFactor) {
+        
+        Position memory position = positions[user];
+        require(position.collateralAmount > 0, "No position");
+        
+        // Get current exchange rate
+        bytes32 collateralId = keccak256(bytes(position.collateralAsset));
+        bytes32 borrowedId = keccak256(bytes(position.borrowedAsset));
+        
+        IIfaPriceFeed.DerviedPair memory pair = oracle.getPairbyId(
+            collateralId,
+            borrowedId,
+            IIfaPriceFeed.PairDirection.Forward
+        );
+        
+        require(
+            block.timestamp - pair.lastUpdateTime <= MAX_PRICE_AGE,
+            "Price data too stale for liquidation"
+        );
+        
+        // Calculate collateral value in borrowed asset terms
+        uint256 collateralValue = (position.collateralAmount * pair.derivedPrice) / 10**30;
+        
+        // Calculate health factor (collateralValue / borrowedAmount)
+        healthFactor = (collateralValue * BASIS_POINTS) / position.borrowedAmount;
+        
+        // Can liquidate if health factor below threshold
+        canLiquidate = healthFactor < LIQUIDATION_THRESHOLD;
+    }
+    
+    function getRequiredCollateral(
+        string memory collateralAsset,
+        string memory borrowAsset,
+        uint256 borrowAmount
+    ) external view returns (uint256 requiredCollateral) {
+        
+        bytes32 collateralId = keccak256(bytes(collateralAsset));
+        bytes32 borrowId = keccak256(bytes(borrowAsset));
+        
+        IIfaPriceFeed.DerviedPair memory pair = oracle.getPairbyId(
+            borrowId,  // Note: reversed for borrow/collateral calculation
+            collateralId,
+            IIfaPriceFeed.PairDirection.Forward
+        );
+        
+        require(
+            block.timestamp - pair.lastUpdateTime <= MAX_PRICE_AGE,
+            "Price data too stale"
+        );
+        
+        // Calculate required collateral with safety margin
+        uint256 baseCollateral = (borrowAmount * pair.derivedPrice) / 10**30;
+        requiredCollateral = (baseCollateral * BASIS_POINTS) / LIQUIDATION_THRESHOLD;
+    }
+}
+```
+
+## Relayer Implementation Examples
+
+### Basic Relayer Node
+
+Example implementation of a relayer node:
+
+```solidity
+// SPDX-License-Identifier: MIT
+pragma solidity ^0.8.29;
+
+import "./IfaPriceFeedVerifier.sol";
+import "./IIfaPriceFeed.sol";
+
+contract RelayerNode {
+    IfaPriceFeedVerifier public immutable verifier;
+    address public owner;
+    
+    mapping(string => bool) public supportedAssets;
+    string[] public assetList;
+    
+    modifier onlyOwner() {
+        require(msg.sender == owner, "Only owner");
+        _;
+    }
+    
+    constructor(address _verifier) {
+        verifier = IfaPriceFeedVerifier(_verifier);
+        owner = msg.sender;
+    }
+    
+    function addSupportedAsset(string memory asset) external onlyOwner {
+        if (!supportedAssets[asset]) {
+            supportedAssets[asset] = true;
+            assetList.push(asset);
+        }
+    }
+    
+    function submitPrices(
+        string[] memory assets,
+        uint256[] memory prices,
+        uint256[] memory roundIds
+    ) external onlyOwner {
+        require(assets.length == prices.length, "Array length mismatch");
+        require(assets.length == roundIds.length, "Array length mismatch");
+        
+        bytes32[] memory assetIds = new bytes32[](assets.length);
+        IIfaPriceFeed.PriceFeed[] memory priceFeeds = 
+            new IIfaPriceFeed.PriceFeed[](assets.length);
+        
+        for (uint i = 0; i < assets.length; i++) {
+            require(supportedAssets[assets[i]], "Unsupported asset");
+            
+            assetIds[i] = keccak256(bytes(assets[i]));
+            priceFeeds[i] = IIfaPriceFeed.PriceFeed({
+                decimal: -8, // Assuming 8 decimal places
+                lastUpdateTime: block.timestamp,
+                price: prices[i],
+                roundId: roundIds[i]
+            });
+        }
+        
+        verifier.submitPriceFeed(assetIds, priceFeeds);
+    }
+}
+```
+
+### Automated Price Updater
+
+A more sophisticated relayer with automatic updates:
+
+```solidity
+// SPDX-License-Identifier: MIT
+pragma solidity ^0.8.29;
+
+import "./IfaPriceFeedVerifier.sol";
+import "./IIfaPriceFeed.sol";
+
+contract AutomatedRelayer {
+    IfaPriceFeedVerifier public immutable verifier;
+    IIfaPriceFeed public immutable priceFeed;
+    
+    address public owner;
+    uint256 public updateInterval = 300; // 5 minutes
+    uint256 public lastUpdateTime;
+    
+    struct AssetConfig {
+        string symbol;
+        int256 decimals;
+        uint256 priceDeviationThreshold; // in basis points
+        bool isActive;
+    }
+    
+    mapping(bytes32 => AssetConfig) public assetConfigs;
+    bytes32[] public trackedAssets;
+    
+    event PricesUpdated(uint256 assetCount, uint256 timestamp);
+    event AssetAdded(string symbol, bytes32 indexed assetId);
+    
+    modifier onlyOwner() {
+        require(msg.sender == owner, "Only owner");
+        _;
+    }
+    
+    constructor(address _verifier, address _priceFeed) {
+        verifier = IfaPriceFeedVerifier(_verifier);
+        priceFeed = IIfaPriceFeed(_priceFeed);
+        owner = msg.sender;
+        lastUpdateTime = block.timestamp;
+    }
+    
+    function addAsset(
+        string memory symbol,
+        int256 decimals,
+        uint256 deviationThreshold
+    ) external onlyOwner {
+        bytes32 assetId = keccak256(bytes(symbol));
+        
+        assetConfigs[assetId] = AssetConfig({
+            symbol: symbol,
+            decimals: decimals,
+            priceDeviationThreshold: deviationThreshold,
+            isActive: true
+        });
+        
+        trackedAssets.push(assetId);
+        emit AssetAdded(symbol, assetId);
+    }
+    
+    function updatePrices(
+        bytes32[] memory assetIds,
+        uint256[] memory newPrices,
+        uint256[] memory roundIds
+    ) external onlyOwner {
+        require(assetIds.length == newPrices.length, "Array length mismatch");
+        require(
+            block.timestamp >= lastUpdateTime + updateInterval,
+            "Update too frequent"
+        );
+        
+        IIfaPriceFeed.PriceFeed[] memory priceFeeds = 
+            new IIfaPriceFeed.PriceFeed[](assetIds.length);
+        
+        for (uint i = 0; i < assetIds.length; i++) {
+            AssetConfig memory config = assetConfigs[assetIds[i]];
+            require(config.isActive, "Asset not active");
+            
+            // Validate price deviation if previous price exists
+            (IIfaPriceFeed.PriceFeed memory currentPrice, bool exists) = 
+                priceFeed.getAssetInfo(assetIds[i]);
+            
+            if (exists) {
+                uint256 deviation = _calculateDeviation(
+                    currentPrice.price,
+                    newPrices[i]
+                );
+                require(
+                    deviation <= config.priceDeviationThreshold,
+                    "Price deviation too large"
+                );
+            }
+            
+            priceFeeds[i] = IIfaPriceFeed.PriceFeed({
+                decimal: config.decimals,
+                lastUpdateTime: block.timestamp,
+                price: newPrices[i],
+                roundId: roundIds[i]
+            });
+        }
+        
+        verifier.submitPriceFeed(assetIds, priceFeeds);
+        lastUpdateTime = block.timestamp;
+        
+        emit PricesUpdated(assetIds.length, block.timestamp);
+    }
+    
+    function _calculateDeviation(uint256 oldPrice, uint256 newPrice) 
+        internal pure returns (uint256) {
+        
+        uint256 diff = oldPrice > newPrice ? 
+            oldPrice - newPrice : 
+            newPrice - oldPrice;
+        
+        return (diff * 10000) / oldPrice; // Return in basis points
+    }
+}
+```
+
+## Error Handling Patterns
+
+### Robust Price Consumer with Fallbacks
+
+```solidity
+// SPDX-License-Identifier: MIT
+pragma solidity ^0.8.29;
+
+import "./IIfaPriceFeed.sol";
+
+contract RobustPriceConsumer {
+    IIfaPriceFeed public primaryOracle;
+    IIfaPriceFeed public fallbackOracle;
+    
+    uint256 public constant MAX_PRICE_AGE = 3600;
+    uint256 public constant MAX_DEVIATION = 500; // 5% in basis points
+    
+    event FallbackUsed(bytes32 indexed asset, string reason);
+    event PriceValidationFailed(bytes32 indexed asset, string reason);
+    
+    constructor(address _primary, address _fallback) {
+        primaryOracle = IIfaPriceFeed(_primary);
+        fallbackOracle = IIfaPriceFeed(_fallback);
+    }
+    
+    function getReliablePrice(string memory assetSymbol) 
+        external view returns (
+            uint256 price,
+            uint256 timestamp,
+            bool fromFallback
+        ) {
+        
+        bytes32 assetId = keccak256(bytes(assetSymbol));
+        
+        // Try primary oracle first
+        try this._getPriceFromOracle(primaryOracle, assetId) 
+            returns (uint256 primaryPrice, uint256 primaryTimestamp) {
+            
+            // Validate with fallback if available
+            try this._getPriceFromOracle(fallbackOracle, assetId)
+                returns (uint256 fallbackPrice, uint256 fallbackTimestamp) {
+                
+                uint256 deviation = _calculateDeviation(primaryPrice, fallbackPrice);
+                
+                if (deviation <= MAX_DEVIATION) {
+                    // Prices agree, use primary
+                    return (primaryPrice, primaryTimestamp, false);
+                } else {
+                    // Large deviation, use newer price
+                    if (primaryTimestamp >= fallbackTimestamp) {
+                        return (primaryPrice, primaryTimestamp, false);
+                    } else {
+                        return (fallbackPrice, fallbackTimestamp, true);
+                    }
+                }
+            } catch {
+                // Fallback failed, use primary if valid
+                return (primaryPrice, primaryTimestamp, false);
+            }
+            
+        } catch {
+            // Primary failed, try fallback
+            try this._getPriceFromOracle(fallbackOracle, assetId)
+                returns (uint256 fallbackPrice, uint256 fallbackTimestamp) {
+                
+                return (fallbackPrice, fallbackTimestamp, true);
+                
+            } catch {
+                revert("All oracles failed");
+            }
+        }
+    }
+    
+    function _getPriceFromOracle(IIfaPriceFeed oracle, bytes32 assetId) 
+        external view returns (uint256 price, uint256 timestamp) {
+        
+        (IIfaPriceFeed.PriceFeed memory priceData, bool exists) = 
+            oracle.getAssetInfo(assetId);
+        
+        require(exists, "Asset not found");
+        
+        timestamp = priceData.lastUpdateTime;
+        require(
+            block.timestamp - timestamp <= MAX_PRICE_AGE,
+            "Price too stale"
+        );
+        
+        price = priceData.price;
+        require(price > 0, "Invalid price");
+    }
+    
+    function _calculateDeviation(uint256 price1, uint256 price2) 
+        internal pure returns (uint256) {
+        
+        uint256 diff = price1 > price2 ? price1 - price2 : price2 - price1;
+        return (diff * 10000) / price1;
+    }
+}
+```
+
+## Testing Examples
+
+### Comprehensive Test Suite
+
+```solidity
+// SPDX-License-Identifier: MIT
+pragma solidity ^0.8.29;
+
+import "forge-std/Test.sol";
+import "./IIfaPriceFeed.sol";
+import "./SimplePriceConsumer.sol";
+
+contract PriceConsumerTest is Test {
+    IIfaPriceFeed oracle;
+    SimplePriceConsumer consumer;
+    
+    bytes32 constant BTC_ID = keccak256("BTC");
+    bytes32 constant ETH_ID = keccak256("ETH");
+    
+    function setUp() public {
+        // Deploy mock oracle (you would deploy the actual contracts)
+        oracle = IIfaPriceFeed(deployMockOracle());
+        consumer = new SimplePriceConsumer(address(oracle));
+    }
+    
+    function testGetAssetPrice() public {
+        // Test successful price retrieval
+        (uint256 price, uint256 decimal, uint256 age) = 
+            consumer.getAssetPrice("BTC");
+        
+        assertGt(price, 0, "Price should be greater than 0");
+        assertEq(decimal, 8, "BTC should have 8 decimals");
+        assertLt(age, 3600, "Price should be fresh");
+    }
+    
+    function testStalePrice() public {
+        // Test stale price rejection
+        // (Implementation would involve mocking old timestamps)
+        vm.warp(block.timestamp + 7200); // Fast forward 2 hours
+        
+        vm.expectRevert("Price data too stale");
+        consumer.getAssetPrice("BTC");
+    }
+    
+    function testNonExistentAsset() public {
+        vm.expectRevert("Asset price not available");
+        consumer.getAssetPrice("NONEXISTENT");
+    }
+    
+    function deployMockOracle() internal returns (address) {
+        // Deploy and configure mock oracle for testing
+        // This would be your actual oracle deployment in real tests
+        return address(0x123); // Placeholder
+    }
+}
+```
+
+## Performance Optimization Examples
+
+### Batch Price Fetcher
+
+```solidity
+// SPDX-License-Identifier: MIT
+pragma solidity ^0.8.29;
+
+import "./IIfaPriceFeed.sol";
+
+contract BatchPriceFetcher {
+    IIfaPriceFeed public immutable oracle;
+    
+    constructor(address _oracle) {
+        oracle = IIfaPriceFeed(_oracle);
+    }
+    
+    function getBatchPrices(string[] memory symbols) 
+        external view returns (
+            uint256[] memory prices,
+            uint256[] memory timestamps,
+            bool[] memory valid
+        ) {
+        
+        bytes32[] memory assetIds = new bytes32[](symbols.length);
+        for (uint i = 0; i < symbols.length; i++) {
+            assetIds[i] = keccak256(bytes(symbols[i]));
+        }
+        
+        (IIfaPriceFeed.PriceFeed[] memory priceData, bool[] memory exists) = 
+            oracle.getAssetsInfo(assetIds);
+        
+        prices = new uint256[](symbols.length);
+        timestamps = new uint256[](symbols.length);
+        valid = new bool[](symbols.length);
+        
+        for (uint i = 0; i < symbols.length; i++) {
+            if (exists[i]) {
+                prices[i] = priceData[i].price;
+                timestamps[i] = priceData[i].lastUpdateTime;
+                valid[i] = true;
+            }
+        }
+    }
+    
+    function getBatchExchangeRates(
+        string[] memory fromAssets,
+        string[] memory toAssets
+    ) external view returns (
+        uint256[] memory rates,
+        uint256[] memory timestamps,
+        bool[] memory valid
+    ) {
+        require(fromAssets.length == toAssets.length, "Array length mismatch");
+        
+        bytes32[] memory fromIds = new bytes32[](fromAssets.length);
+        bytes32[] memory toIds = new bytes32[](fromAssets.length);
+        
+        for (uint i = 0; i < fromAssets.length; i++) {
+            fromIds[i] = keccak256(bytes(fromAssets[i]));
+            toIds[i] = keccak256(bytes(toAssets[i]));
+        }
+        
+        IIfaPriceFeed.DerviedPair[] memory pairs = 
+            oracle.getPairsbyIdForward(fromIds, toIds);
+        
+        rates = new uint256[](fromAssets.length);
+        timestamps = new uint256[](fromAssets.length);
+        valid = new bool[](fromAssets.length);
+        
+        for (uint i = 0; i < fromAssets.length; i++) {
+            if (pairs[i].derivedPrice > 0) {
+                rates[i] = pairs[i].derivedPrice;
+                timestamps[i] = pairs[i].lastUpdateTime;
+                valid[i] = true;
+            }
+        }
+    }
+}
+```
+
+## Real-World Use Cases
+
+### DEX Price Impact Calculator
+
+```solidity
+// SPDX-License-Identifier: MIT
+pragma solidity ^0.8.29;
+
+import "./IIfaPriceFeed.sol";
+
+contract DEXPriceImpactCalculator {
+    IIfaPriceFeed public immutable oracle;
+    
+    constructor(address _oracle) {
+        oracle = IIfaPriceFeed(_oracle);
+    }
+    
+    function calculatePriceImpact(
+        string memory tokenA,
+        string memory tokenB,
+        uint256 amountIn,
+        uint256 amountOut
+    ) external view returns (
+        uint256 priceImpactBasisPoints,
+        uint256 fairExchangeRate,
+        uint256 actualExchangeRate
+    ) {
+        // Get oracle exchange rate
+        bytes32 tokenAId = keccak256(bytes(tokenA));
+        bytes32 tokenBId = keccak256(bytes(tokenB));
+        
+        IIfaPriceFeed.DerviedPair memory pair = oracle.getPairbyId(
+            tokenAId,
+            tokenBId,
+            IIfaPriceFeed.PairDirection.Forward
+        );
+        
+        fairExchangeRate = pair.derivedPrice; // 30 decimals
+        
+        // Calculate actual exchange rate from trade
+        actualExchangeRate = (amountOut * 10**30) / amountIn;
+        
+        // Calculate price impact
+        if (actualExchangeRate < fairExchangeRate) {
+            uint256 impact = fairExchangeRate - actualExchangeRate;
+            priceImpactBasisPoints = (impact * 10000) / fairExchangeRate;
+        } else {
+            priceImpactBasisPoints = 0; // Favorable trade
+        }
+    }
+}
+```
+
+## Next Steps
+
+With these comprehensive examples, you can:
+
+<CardGroup cols={2}>
+  <Card
+    title="Start Building"
+    icon="hammer"
+    href="/usage/integration"
+  >
+    Learn about relayer setup and advanced integration patterns
+  </Card>
+  <Card
+    title="Deploy Contracts"
+    icon="rocket"
+    href="/usage/deployment"
+  >
+    Follow the deployment guide to get started
+  </Card>
+</CardGroup>
+
+<Tip>
+These examples provide a solid foundation for most use cases. Adapt them to your specific requirements and always test thoroughly before production deployment.
+</Tip> 

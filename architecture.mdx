@@ -1,0 +1,423 @@
+---
+title: Architecture
+description: "IFA Oracle system architecture and data flow"
+---
+
+# Architecture
+
+Multi-layered oracle architecture for reliable stablecoin price data with 30-decimal precision.
+
+## System Layers
+
+```mermaid
+graph TB
+    subgraph "External Layer"
+        A[Relayer Node] 
+        E[Price Sources]
+    end
+    
+    subgraph "Validation Layer"
+        B[IfaPriceFeedVerifier]
+        F[Access Control]
+        G[Data Validation]
+    end
+    
+    subgraph "Data Layer"
+        C[IfaPriceFeed Contract]
+        H[30-Decimal Engine]
+        I[Exchange Rate Calculator]
+    end
+    
+    subgraph "Interface Layer"
+        D[DApp Integration]
+        J[Batch Operations]
+    end
+    
+    E --> A
+    A --> B
+    F --> B
+    G --> B
+    B --> C
+    H --> C
+    I --> C
+    C --> D
+    J --> D
+```
+
+### 1. External Layer
+- **Relayer Node**: Authorized price data collector with cryptographic validation
+  - Role-based authentication via verifier contract
+  - Batched submission capability for gas optimization
+  - Replay attack protection through round IDs
+- **Price Sources**: External market data providers and APIs
+  - Multiple data source aggregation
+  - Real-time price feed monitoring
+  - Data integrity verification before submission
+
+## Off-chain Relayer Architecture
+
+```mermaid
+graph TB
+    subgraph "Data Collection Layer"
+        A1[Primary APIs] --> B1[API Client]
+        A2[Backup APIs] --> B1
+        B1 --> C1[Data Aggregator]
+    end
+    
+    subgraph "Processing Layer"
+        C1 --> D1[Price Validator]
+        D1 --> E1[Outlier Detection]
+        E1 --> F1[TWAP Calculator]
+        F1 --> G1[Precision Converter]
+    end
+    
+    subgraph "Transaction Layer"
+        G1 --> H1[Transaction Manager]
+        H1 --> I1[Gas Optimizer]
+        I1 --> J1[Blockchain Client]
+    end
+    
+    subgraph "Monitoring Layer"
+        K1[Health Monitor]
+        L1[Alert System]
+        M1[Performance Metrics]
+    end
+    
+    K1 --> H1
+    L1 --> H1
+    M1 --> H1
+```
+
+### 1. Data Collection Layer
+- **Primary Data Sources**
+  - Direct exchange API connections
+  - WebSocket price feeds
+  - REST API endpoints
+  - Configurable update frequencies
+- **Backup Sources**
+  - Secondary price aggregators
+  - Fallback data providers
+  - Automatic failover logic
+- **Data Aggregator**
+  - Connection pool management
+  - Rate limiting compliance
+  - Data normalization pipeline
+
+### 2. Processing Layer
+- **Price Validation**
+  - Format verification
+  - Range validation
+  - Timestamp checks
+  - Source reliability scoring
+- **Outlier Detection**
+  - Statistical analysis
+  - Moving average comparisons
+  - Volatility thresholds
+  - Configurable deviation limits
+- **TWAP Calculator**
+  - Time-weighted average price
+  - Configurable time windows
+  - Volume-weighted options
+- **Precision Converter**
+  - 30-decimal conversion logic
+  - Rounding rules
+  - Overflow protection
+
+### 3. Transaction Layer
+- **Transaction Manager**
+  - Queue management
+  - Retry logic
+  - Nonce tracking
+  - Transaction signing
+- **Gas Optimizer**
+  - Dynamic gas pricing
+  - EIP-1559 support
+  - Priority fee estimation
+  - Batch optimization
+- **Blockchain Client**
+  - Multiple RPC endpoints
+  - Automatic node failover
+  - Connection health monitoring
+  - Transaction confirmation tracking
+
+### 4. Monitoring Layer
+- **Health Monitor**
+  - Component status tracking
+  - Resource utilization
+  - Connection states
+  - Processing pipeline metrics
+- **Alert System**
+  - Error notifications
+  - Performance alerts
+  - Price deviation warnings
+  - Infrastructure alerts
+- **Performance Metrics**
+  - Response times
+  - Update frequencies
+  - Gas costs
+  - Success rates
+
+### Relayer High Availability
+```mermaid
+graph TB
+    subgraph "Primary Relayer"
+        A[Active Node]
+        B[Hot Standby]
+    end
+    
+    subgraph "Backup Relayer"
+        C[Warm Standby]
+        D[Cold Standby]
+    end
+    
+    A -->|Heartbeat| B
+    B -->|Monitor| A
+    B -->|Failover| C
+    C -->|Emergency| D
+```
+
+- **Active-Active Configuration**
+  - Multiple relayer instances
+  - Load balancing
+  - Geographic distribution
+  - Automatic failover
+- **Backup Systems**
+  - Hot standby nodes
+  - Warm failover instances
+  - Cold backup systems
+  - Data synchronization
+
+### Error Handling & Recovery
+```mermaid
+graph LR
+    A[Error Detection] -->|Classify| B[Error Type]
+    B -->|Temporary| C[Retry Logic]
+    B -->|Persistent| D[Failover]
+    B -->|Critical| E[Emergency Stop]
+    
+    C -->|Success| F[Resume]
+    C -->|Failure| D
+    D -->|Success| F
+    D -->|Failure| E
+```
+
+- **Error Classification**
+  - Network issues
+  - API failures
+  - Data validation errors
+  - Blockchain issues
+- **Recovery Procedures**
+  - Automatic retry logic
+  - Circuit breakers
+  - Fallback procedures
+  - Manual intervention protocols
+
+### Configuration Management
+```yaml
+relayer:
+  primary_sources:
+    - name: binance
+      type: websocket
+      priority: 1
+      rate_limit: 100/minute
+    - name: coinbase
+      type: rest
+      priority: 2
+      rate_limit: 50/minute
+  
+  backup_sources:
+    - name: coingecko
+      type: rest
+      priority: 3
+    - name: coinmarketcap
+      type: rest
+      priority: 4
+
+  validation:
+    price_deviation_threshold: 2.5%
+    minimum_sources: 3
+    twap_window: 5minutes
+    
+  transaction:
+    max_batch_size: 10
+    retry_attempts: 3
+    gas_premium: 10%
+    confirmation_blocks: 2
+    
+  monitoring:
+    heartbeat_interval: 30seconds
+    alert_channels:
+      - slack
+      - email
+      - pagerduty
+```
+
+### 2. Validation Layer
+- **IfaPriceFeedVerifier**: Multi-stage validation pipeline
+  - **Access Control**: Relayer permission verification using role-based system
+  - **Data Integrity**: Format validation, timestamp verification, and bounds checking
+  - **Security Gates**: Protection against stale data, invalid precision, and malformed payloads
+- **Validation Rules**:
+  - Price values must be positive integers
+  - Decimal precision within bounds (-30 to +30)
+  - Timestamps must be recent (configurable staleness threshold)
+  - Asset IDs must be valid keccak256 hashes
+
+### 3. Data Layer
+- **IfaPriceFeed Contract**: High-precision price storage and computation engine
+  - **30-Decimal Engine**: Fixed-point arithmetic for maximum financial precision
+    - All calculations scaled to 10^30 for consistent precision
+    - Prevents rounding errors in exchange rate calculations
+    - Supports micro-transactions and high-value operations
+  - **Exchange Rate Calculator**: Real-time cross-asset rate computation
+    - Forward/backward rate calculations: `Rate = (PriceA * 10^30) / PriceB`
+    - Batch processing for multiple pairs simultaneously
+    - Timestamp synchronization for consistent pricing
+- **Storage Optimization**: 
+  - Gas-efficient storage patterns
+  - Minimal state changes for cost optimization
+
+### 4. Interface Layer
+- **IIfaPriceFeed Interface**: Standardized API with comprehensive functionality
+  - Single asset queries: `getAssetInfo()`
+  - Batch asset queries: `getAssetsInfo()`
+  - Exchange rate calculations: `getPairById()`, `getPairsbyIdForward()`
+- **Consumer Access**: Read-only functions optimized for DApp integration
+  - **Batch Operations**: Retrieve multiple prices in single transaction
+  - **Direction Control**: Forward/backward exchange rate calculations
+  - **Error Handling**: Existence checks and validation responses
+
+## Data Flow
+
+### Normal Price Update Flow
+
+```mermaid
+sequenceDiagram
+    participant PS as Price Sources
+    participant RN as Relayer Node
+    participant V as IfaPriceFeedVerifier
+    participant PF as IfaPriceFeed
+    participant App as DApp Consumer
+
+    PS->>RN: Price Data Stream
+    RN->>RN: Aggregate & Format
+    RN->>V: submitPriceFeed(assetIds[], priceFeeds[])
+    
+    Note over V: Validation Pipeline
+    V->>V: Check relayer permissions
+    V->>V: Validate price format
+    V->>V: Verify timestamps
+    V->>V: Check decimal bounds
+    
+    V->>PF: setAssetInfo(assetId, priceFeed)
+    PF->>PF: Store price data
+    PF->>PF: Update round ID
+    
+    App->>PF: getPairById(assetA, assetB)
+    PF->>PF: Calculate: (priceA * 10^30) / priceB
+    PF->>App: DerivedPair{rate, timestamp, roundDiff}
+```
+
+### Batch Operations Flow
+
+```mermaid
+sequenceDiagram
+    participant RN as Relayer Node
+    participant V as Verifier
+    participant PF as PriceFeed
+    participant App as DApp
+
+    Note over RN: Batch Price Submission
+    RN->>V: submitPriceFeed([BTC,ETH,USDC], [priceFeeds])
+    
+    loop For each asset
+        V->>V: Validate individual asset
+        V->>PF: setAssetInfo(assetId, priceFeed)
+    end
+    
+    Note over App: Batch Price Retrieval
+    App->>PF: getAssetsInfo([BTC,ETH,USDC])
+    PF->>App: [priceFeeds], [exists]
+    
+    App->>PF: getPairsbyIdForward([BTC,ETH], [USDC,USDT])
+    PF->>App: [BTC/USDC, ETH/USDT] rates
+```
+
+### Error Handling Flow
+
+```mermaid
+sequenceDiagram
+    participant RN as Relayer Node
+    participant V as Verifier
+    participant PF as PriceFeed
+    participant App as DApp
+
+    Note over RN,V: Invalid Relayer Access
+    RN->>V: submitPriceFeed(data)
+    V->>V: Check permissions
+    V-->>RN: Revert: "Not authorized relayer"
+    
+    Note over V,PF: Validation Failure
+    RN->>V: submitPriceFeed(invalidData)
+    V->>V: Validate format
+    V-->>RN: Revert: "Invalid price format"
+    
+    Note over App,PF: Non-existent Asset Query
+    App->>PF: getAssetInfo(unknownAssetId)
+    PF->>App: (emptyPriceFeed, exists: false)
+    
+    Note over App,PF: Division by Zero Protection
+    App->>PF: getPairById(assetA, assetB)
+    Note over PF: If priceB = 0
+    PF-->>App: Revert: "Division by zero"
+```
+
+### Real-time Integration Pattern
+
+```mermaid
+sequenceDiagram
+    participant Timer as Update Timer
+    participant RN as Relayer
+    participant V as Verifier  
+    participant PF as PriceFeed
+    participant DeFi as DeFi Protocol
+
+    loop Every Update Interval
+        Timer->>RN: Trigger price update
+        RN->>V: Submit latest prices
+        V->>PF: Update stored prices
+        
+        DeFi->>PF: getPairById(collateral, debt)
+        PF->>DeFi: Current exchange rate
+        DeFi->>DeFi: Calculate liquidation threshold
+        
+        alt Price movement triggers action
+            DeFi->>DeFi: Execute liquidation/rebalancing
+        end
+    end
+```
+
+## Exchange Rate Calculation
+
+```
+Rate = Price(Asset A) / Price(Asset B)
+```
+
+- USD-based pricing for all assets
+- High precision decimal scaling
+- Bidirectional calculations (A→B, B→A)
+- Real-time rate updates
+
+
+## Basic Integration
+
+```solidity
+// Get exchange rate
+uint256 rate = priceFeed.getPairById(assetA, assetB);
+
+// Get asset info
+AssetInfo memory info = priceFeed.getAssetInfo(assetId);
+
+// Batch operations
+AssetInfo[] memory assets = priceFeed.getAssetsInfo(assetIds);
+``` 

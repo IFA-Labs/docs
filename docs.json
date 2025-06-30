@@ -1,0 +1,119 @@
+{
+  "$schema": "https://mintlify.com/docs.json",
+  "theme": "mint",
+  "name": "IfaLabs",
+  "colors": {
+    "primary": "#F78E21",
+    "light": "#F78E21", 
+    "dark": "#CC6A00"
+  },
+  "favicon": "/ifalight.svg",
+  "navigation": {
+    "tabs": [
+      {
+        "tab": "Guides",
+        "groups": [
+          {
+            "group": "Get Started",
+            "pages": [
+              "index",
+              "installation"
+            ]
+          },
+          {
+            "group": "Architecture",
+            "pages": [
+              "architecture",
+              "architecture/security-model",
+              "architecture/performance-precision",
+              "architecture/deployment",
+              "architecture/integration"
+            ]
+          },
+          {
+            "group": "Core Concepts",
+            "pages": [
+              "contracts/overview",
+              "contracts/interface",
+              "contracts/pricefeed",
+              "contracts/verifier"
+            ]
+          },
+          {
+            "group": "Usage Guide",
+            "pages": [
+              "usage/deployment",
+              "usage/examples",
+              "usage/integration"
+            ]
+          }
+        ]
+      },
+      {
+        "tab": "API Reference",
+        "groups": [
+          {
+            "group": "API Documentation",
+            "pages": [
+              "api-reference/introduction"
+            ]
+          }
+        ]
+      }
+    ],
+    "global": {
+      "anchors": [
+        {
+          "anchor": "Documentation",
+          "href": "https://ifalabs.mintlify.app/",
+          "icon": "book-open-cover"
+        },
+        {
+          "anchor": "Website",
+          "href": "https://ifalabs.com",
+          "icon": "globe"
+        },
+        {
+          "anchor": "Blog",
+          "href": "https://mirror.xyz/0x4801BcefA7Af2Af79Ee7132A4B317fb62A77b9C7/QOytHQar8Lq_OGttcf1U1bbm0OoLXlfULnygE8x-_ro",
+          "icon": "newspaper"
+        }
+      ]
+    }
+  },
+  "logo": {
+    "light": "/logo/ifadark.svg",
+    "dark": "/logo/ifadark.svg"
+  },
+  "navbar": {
+    "links": [
+      {
+        "label": "Support",
+        "href": "mailto:hi@mintlify.com"
+      }
+    ],
+    "primary": {
+      "type": "button",
+      "label": "Dashboard",
+      "href": "https://dashboard.mintlify.com"
+    }
+  },
+  "footer": {
+    "socials": {
+      "x": "https://x.com/mintlify",
+      "github": "https://github.com/mintlify",
+      "linkedin": "https://linkedin.com/company/mintlify"
+    }
+  },
+  "styling": {
+    "callouts": {
+      "tip": "#F78E21",
+      "info": "#F78E21", 
+      "warning": "#F78E21",
+      "note": "#F78E21",
+      "check": "#F78E21"
+    }
+  },
+  "customCss": "/css/custom.css",
+  "css": "/css/custom.css"
+}

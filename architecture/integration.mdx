@@ -1,0 +1,359 @@
+---
+title: Integration Guide
+description: "Production-ready integration patterns, error handling, and optimization strategies"
+---
+
+## Basic Integration Patterns
+
+```solidity
+// Simple price query
+uint256 rate = priceFeed.getPairById(assetA, assetB);
+
+// Asset information with existence check
+(AssetInfo memory info, bool exists) = priceFeed.getAssetInfo(assetId);
+
+// Batch operations for efficiency
+AssetInfo[] memory assets = priceFeed.getAssetsInfo(assetIds);
+```
+
+## Advanced Integration Patterns
+
+### Production-Ready Price Consumer
+```solidity
+contract AdvancedPriceConsumer {
+    IIfaPriceFeed public immutable oracle;
+    uint256 public constant MAX_STALENESS = 300; // 5 minutes
+    uint256 public constant MAX_PRICE_DEVIATION = 1000; // 10%
+    
+    mapping(bytes32 => uint256) private lastKnownPrices;
+    mapping(bytes32 => uint256) private priceUpdateCounts;
+    
+    event PriceAnomalyDetected(bytes32 assetId, uint256 oldPrice, uint256 newPrice);
+    event StaleDataWarning(bytes32 assetId, uint256 age);
+    
+    constructor(address _oracle) {
+        oracle = IIfaPriceFeed(_oracle);
+    }
+    
+    function getValidatedPrice(bytes32 assetId) external view returns (uint256) {
+        (IIfaPriceFeed.PriceFeed memory price, bool exists) = oracle.getAssetInfo(assetId);
+        
+        require(exists, "Asset not supported");
+        require(price.price > 0, "Invalid price");
+        
+        uint256 dataAge = block.timestamp - price.lastUpdateTime;
+        require(dataAge <= MAX_STALENESS, "Price data too stale");
+        
+        return _adjustDecimals(price.price, price.decimal, 18);
+    }
+    
+    function getValidatedPriceWithDeviation(bytes32 assetId) 
+        external returns (uint256) {
+        (IIfaPriceFeed.PriceFeed memory price, bool exists) = oracle.getAssetInfo(assetId);
+        
+        require(exists, "Asset not supported");
+        require(price.price > 0, "Invalid price");
+        
+        // Check for price manipulation
+        uint256 lastPrice = lastKnownPrices[assetId];
+        if (lastPrice > 0) {
+            uint256 deviation = _calculateDeviation(lastPrice, price.price);
+            if (deviation > MAX_PRICE_DEVIATION) {
+                emit PriceAnomalyDetected(assetId, lastPrice, price.price);
+                revert("Price deviation too high");
+            }
+        }
+        
+        // Update tracking
+        lastKnownPrices[assetId] = price.price;
+        priceUpdateCounts[assetId]++;
+        
+        return _adjustDecimals(price.price, price.decimal, 18);
+    }
+    
+    function _adjustDecimals(uint256 price, int256 sourceDecimals, uint8 targetDecimals) 
+        private pure returns (uint256) {
+        if (sourceDecimals >= 0) {
+            uint256 scalingFactor = 10 ** (uint256(sourceDecimals) > targetDecimals ? 
+                uint256(sourceDecimals) - targetDecimals : 
+                targetDecimals - uint256(sourceDecimals));
+            
+            return uint256(sourceDecimals) > targetDecimals ?
+                price / scalingFactor :
+                price * scalingFactor;
+        } else {
+            // Handle negative decimals
+            uint256 scalingFactor = 10 ** (uint256(-sourceDecimals) + targetDecimals);
+            return price * scalingFactor;
+        }
+    }
+    
+    function _calculateDeviation(uint256 oldPrice, uint256 newPrice) 
+        private pure returns (uint256) {
+        uint256 diff = oldPrice > newPrice ? oldPrice - newPrice : newPrice - oldPrice;
+        return (diff * 10000) / oldPrice; // Basis points
+    }
+}
+```
+
+### Batch Processing for High-Performance DApps
+```solidity
+contract BatchPriceProcessor {
+    IIfaPriceFeed public immutable oracle;
+    
+    struct PriceRequest {
+        bytes32 assetId;
+        uint8 targetDecimals;
+        uint256 maxStaleness;
+    }
+    
+    struct PriceResponse {
+        uint256 price;
+        uint256 timestamp;
+        bool isValid;
+        string error;
+    }
+    
+    function batchGetValidatedPrices(PriceRequest[] calldata requests)
+        external view returns (PriceResponse[] memory responses) {
+        
+        // Extract asset IDs for batch query
+        bytes32[] memory assetIds = new bytes32[](requests.length);
+        for (uint i = 0; i < requests.length; i++) {
+            assetIds[i] = requests[i].assetId;
+        }
+        
+        // Single batch call to oracle
+        (IIfaPriceFeed.PriceFeed[] memory prices, bool[] memory exists) = 
+            oracle.getAssetsInfo(assetIds);
+        
+        // Process results
+        responses = new PriceResponse[](requests.length);
+        for (uint i = 0; i < requests.length; i++) {
+            responses[i] = _validateAndAdjustPrice(
+                prices[i], 
+                exists[i], 
+                requests[i]
+            );
+        }
+    }
+    
+    function batchGetExchangeRates(
+        bytes32[] calldata assets0,
+        bytes32[] calldata assets1
+    ) external view returns (uint256[] memory rates, bool[] memory isValid) {
+        
+        IIfaPriceFeed.DerviedPair[] memory pairs = 
+            oracle.getPairsbyIdForward(assets0, assets1);
+        
+        rates = new uint256[](pairs.length);
+        isValid = new bool[](pairs.length);
+        
+        for (uint i = 0; i < pairs.length; i++) {
+            uint256 dataAge = block.timestamp - pairs[i].lastUpdateTime;
+            isValid[i] = dataAge <= 300; // 5 minute staleness check
+            rates[i] = pairs[i].derivedPrice;
+        }
+    }
+    
+    function _validateAndAdjustPrice(
+        IIfaPriceFeed.PriceFeed memory price,
+        bool exists,
+        PriceRequest memory request
+    ) private view returns (PriceResponse memory response) {
+        
+        if (!exists) {
+            return PriceResponse(0, 0, false, "Asset not found");
+        }
+        
+        if (price.price == 0) {
+            return PriceResponse(0, 0, false, "Invalid price");
+        }
+        
+        uint256 dataAge = block.timestamp - price.lastUpdateTime;
+        if (dataAge > request.maxStaleness) {
+            return PriceResponse(0, 0, false, "Price too stale");
+        }
+        
+        uint256 adjustedPrice = _adjustDecimals(
+            price.price, 
+            price.decimal, 
+            request.targetDecimals
+        );
+        
+        return PriceResponse(adjustedPrice, price.lastUpdateTime, true, "");
+    }
+}
+```
+
+### Circuit Breaker Integration
+```solidity
+contract PriceCircuitBreaker {
+    IIfaPriceFeed public immutable oracle;
+    
+    struct CircuitBreakerConfig {
+        uint256 maxPriceChange;      // Max % change (basis points)
+        uint256 maxStaleness;        // Max data age (seconds)
+        uint256 minUpdateFrequency;  // Min updates per hour
+        bool emergencyPause;         // Manual pause
+    }
+    
+    mapping(bytes32 => CircuitBreakerConfig) public configs;
+    mapping(bytes32 => uint256) public lastValidPrices;
+    mapping(bytes32 => uint256) public updateCounts;
+    mapping(bytes32 => uint256) public lastHourStart;
+    
+    event CircuitBreakerTripped(bytes32 assetId, string reason);
+    event EmergencyPause(bytes32 assetId, address admin);
+    
+    function getProtectedPrice(bytes32 assetId) external view returns (uint256) {
+        CircuitBreakerConfig memory config = configs[assetId];
+        require(!config.emergencyPause, "Emergency pause active");
+        
+        (IIfaPriceFeed.PriceFeed memory price, bool exists) = oracle.getAssetInfo(assetId);
+        require(exists, "Asset not supported");
+        
+        // Staleness check
+        uint256 dataAge = block.timestamp - price.lastUpdateTime;
+        require(dataAge <= config.maxStaleness, "Price too stale");
+        
+        // Price change validation
+        uint256 lastPrice = lastValidPrices[assetId];
+        if (lastPrice > 0) {
+            uint256 change = _calculateChange(lastPrice, price.price);
+            require(change <= config.maxPriceChange, "Price change too large");
+        }
+        
+        // Update frequency check
+        _validateUpdateFrequency(assetId, config);
+        
+        return price.price;
+    }
+    
+    function _validateUpdateFrequency(bytes32 assetId, CircuitBreakerConfig memory config) 
+        private view {
+        uint256 currentHour = block.timestamp / 3600;
+        uint256 trackedHour = lastHourStart[assetId] / 3600;
+        
+        if (currentHour == trackedHour) {
+            require(updateCounts[assetId] >= config.minUpdateFrequency, 
+                   "Insufficient update frequency");
+        }
+    }
+}
+```
+
+## Error Handling Best Practices
+
+### Comprehensive Error Management
+```solidity
+contract RobustPriceIntegration {
+    enum ErrorType {
+        None,
+        AssetNotFound,
+        PriceInvalid,
+        DataStale,
+        OracleUnreachable,
+        ValidationFailed
+    }
+    
+    struct PriceResult {
+        uint256 price;
+        uint256 timestamp;
+        ErrorType error;
+        uint256 confidence; // 0-100 confidence score
+    }
+    
+    function getResilientPrice(bytes32 assetId) 
+        external view returns (PriceResult memory result) {
+        
+        try this.getOraclePrice(assetId) returns (uint256 price, uint256 timestamp) {
+            result = PriceResult(price, timestamp, ErrorType.None, 100);
+        } catch {
+            // Fallback to last known good price with degraded confidence
+            result = _getFallbackPrice(assetId);
+        }
+    }
+    
+    function getOraclePrice(bytes32 assetId) 
+        external view returns (uint256, uint256) {
+        (IIfaPriceFeed.PriceFeed memory price, bool exists) = oracle.getAssetInfo(assetId);
+        
+        if (!exists) revert("Asset not found");
+        if (price.price == 0) revert("Invalid price");
+        
+        uint256 dataAge = block.timestamp - price.lastUpdateTime;
+        if (dataAge > MAX_STALENESS) revert("Data too stale");
+        
+        return (price.price, price.lastUpdateTime);
+    }
+    
+    function _getFallbackPrice(bytes32 assetId) 
+        private view returns (PriceResult memory) {
+        // Implementation depends on fallback strategy:
+        // - Last known good price
+        // - Secondary oracle
+        // - Time-weighted average
+        // - Conservative estimate
+    }
+}
+```
+
+## Performance Optimization Strategies
+
+### Gas-Efficient Integration Patterns
+```solidity
+// 1. Cache frequently accessed data
+contract CachedPriceConsumer {
+    struct CachedPrice {
+        uint256 price;
+        uint256 cachedAt;
+        uint256 oracleTimestamp;
+    }
+    
+    mapping(bytes32 => CachedPrice) private priceCache;
+    uint256 public constant CACHE_DURATION = 60; // 1 minute cache
+    
+    function getCachedPrice(bytes32 assetId) external view returns (uint256) {
+        CachedPrice memory cached = priceCache[assetId];
+        
+        if (block.timestamp - cached.cachedAt < CACHE_DURATION) {
+            return cached.price; // Return cached value
+        }
+        
+        // Cache expired, fetch new price
+        (IIfaPriceFeed.PriceFeed memory price,) = oracle.getAssetInfo(assetId);
+        return price.price;
+    }
+}
+
+// 2. Batch multiple operations
+function calculatePortfolioValue(
+    bytes32[] calldata assetIds,
+    uint256[] calldata amounts
+) external view returns (uint256 totalValue) {
+    // Single batch call instead of multiple individual calls
+    (IIfaPriceFeed.PriceFeed[] memory prices, bool[] memory exists) = 
+        oracle.getAssetsInfo(assetIds);
+    
+    for (uint i = 0; i < assetIds.length; i++) {
+        if (exists[i]) {
+            totalValue += (amounts[i] * prices[i].price) / (10 ** uint256(prices[i].decimal));
+        }
+    }
+}
+
+// 3. Use view functions for gas-free reads
+function getMultipleRates(
+    bytes32[] calldata assets0,
+    bytes32[] calldata assets1
+) external view returns (uint256[] memory rates) {
+    IIfaPriceFeed.DerviedPair[] memory pairs = 
+        oracle.getPairsbyIdForward(assets0, assets1);
+    
+    rates = new uint256[](pairs.length);
+    for (uint i = 0; i < pairs.length; i++) {
+        rates[i] = pairs[i].derivedPrice;
+    }
+}
+```
